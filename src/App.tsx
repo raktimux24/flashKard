@@ -72,7 +72,7 @@ function App({ flashcards = [], title = 'Flashcards' }: AppProps) {
         } />
         <Route path="/dashboard/flashcards/:id" element={
           <ProtectedRoute>
-            <FlashcardDisplay />
+            <FlashcardDisplay flashcards={flashcards} title={title} />
           </ProtectedRoute>
         } />
         <Route path="/profile" element={

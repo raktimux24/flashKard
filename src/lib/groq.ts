@@ -132,7 +132,7 @@ export async function generateFlashcardsFromText(text: string): Promise<Flashcar
       // Preprocess the content to fix common JSON formatting issues
       const preprocessed = content
         // Convert ["key":"value"] to {"key":"value"}
-        .replace(/\[(\s*"[^"]+"\s*:\s*"[^"]+"\s*,?\s*)+\]/g, match => 
+        .replace(/\[(\s*"[^"]+"\s*:\s*"[^"]+"\s*,?\s*)+\]/g, (match: string) => 
           match.replace(/^\[/, '{').replace(/\]$/, '}')
         )
         // Fix missing quotes around property names

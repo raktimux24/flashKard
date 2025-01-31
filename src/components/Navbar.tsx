@@ -25,7 +25,7 @@ export function Navbar() {
           <div className="flex items-center">
             <Link to="/" className="flex items-center">
               <Brain className="h-8 w-8 text-[#00A6B2]" />
-              <span className="ml-2 text-xl font-bold">FlashAI</span>
+              <span className="ml-2 text-xl font-bold">Flash Karao</span>
             </Link>
           </div>
           

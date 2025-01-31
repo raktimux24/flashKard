@@ -1,3 +1,5 @@
+import { client } from '../config/groq';
+
 export const generateFlashcardsFromText = async (text: string) => {
   try {
     const response = await client.chat.completions.create({

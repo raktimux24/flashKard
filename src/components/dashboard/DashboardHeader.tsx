@@ -33,7 +33,7 @@ export function DashboardHeader() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-[#EAEAEA]">Welcome back, John!</h1>
+        <h1 className="text-3xl font-bold text-[#EAEAEA]">Welcome back, {import.meta.env.AUTH_USER_DISPLAY_NAME}!</h1>
         <p className="text-[#C0C0C0] mt-2">Here's an overview of your learning progress</p>
       </div>
 
