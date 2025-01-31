@@ -146,8 +146,8 @@ export async function generateFlashcardsFromText(text: string): Promise<Flashcar
       // If JSON parsing fails, try to parse the text format
       const cards = content
         .split(/\n\s*\n/)
-        .filter(block => block.trim())
-        .map(block => {
+        .filter((block: string) => block.trim())
+        .map((block: string) => {
           const [question, ...answerParts] = block.split(/\n/);
           return {
             question: question.replace(/^Q:|Question:|^\d+\.|^-/, '').trim(),
