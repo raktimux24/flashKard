@@ -8,7 +8,7 @@ import { cn } from '../../lib/utils';
 import { generateFlashcardsFromText } from '../../lib/groq';
 import { db } from '../../lib/firebase';
 import { useAuthStore } from '../../store/authStore';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 interface UploadedFile {
   id: string;
@@ -206,20 +206,30 @@ export function FileUploader() {
         throw new Error('No content found in the uploaded files');
       }
 
-      const flashcards = await generateFlashcardsFromText(combinedContent);
+      const generatedCards = await generateFlashcardsFromText(combinedContent);
 
-      const flashcardSet = await addDoc(collection(db, 'flashcardSets'), {
-        userId: user.uid,
+      if (!generatedCards || generatedCards.length === 0) {
+        setError('No valid flashcards could be generated from the text. Please try again with different content.');
+        return;
+      }
+
+      const docRef = await addDoc(collection(db, 'flashcardSets'), {
         title: files[0].file.name.split('.')[0],
-        createdAt: new Date().toISOString(),
-        flashcards,
+        flashcards: generatedCards,
+        numberOfCards: generatedCards.length,
+        userId: user.uid,
+        createdAt: serverTimestamp(),
         sourceFiles: files.map(f => f.file.name),
       });
 
-      navigate(`/flashcards/${flashcardSet.id}`);
+      navigate(`/flashcards/${docRef.id}`);
     } catch (error: any) {
       console.error('Error generating flashcards:', error);
-      setError(error.message || 'Failed to generate flashcards. Please try again.');
+      setError(
+        error instanceof Error 
+          ? error.message 
+          : 'Failed to generate flashcards. Please try again.'
+      );
     } finally {
       setIsGenerating(false);
     }

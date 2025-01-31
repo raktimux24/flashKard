@@ -1,35 +1,51 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Eye, Edit2, Trash2, FileDown, CheckSquare, Square } from 'lucide-react';
 import { PatternCard, PatternCardBody } from '../ui/card-with-ellipsis-pattern';
 import { cn } from '../../lib/utils';
+import { addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, getDoc } from 'firebase/firestore';
+import { db } from '../../firebase/firebaseConfig';
+import { Timestamp } from 'firebase/firestore';
 
 interface FlashcardSet {
   id: string;
   title: string;
-  cardCount: number;
-  createdAt: string;
+  description: string;
+  flashcards: any[];
+  numberOfCards: number;
   userId: string;
-}
-
-const mockSets: FlashcardSet[] = [
-  { id: '1', title: 'Biology Chapter 1', cardCount: 20, createdAt: 'Yesterday', userId: 'user1' },
-  { id: '2', title: 'Chemistry Basics', cardCount: 15, createdAt: 'Last Week', userId: 'user2' },
-  { id: '3', title: 'History Notes', cardCount: 30, createdAt: 'Today', userId: 'user3' },
-  { id: '4', title: 'Math Formulas', cardCount: 10, createdAt: 'Two Days Ago', userId: 'user4' },
-];
-
-interface PatternCardProps {
-  children: React.ReactNode;
-  className?: string;
-  gradientClassName?: string;
-  onClick?: () => void;
+  createdAt: Timestamp;
+  lastModified?: Timestamp;
+  sourceFiles?: string[];
 }
 
 export function FlashcardSets() {
   const navigate = useNavigate();
   const [selectedSets, setSelectedSets] = useState<Set<string>>(new Set());
+  const [flashcardSets, setFlashcardSets] = useState<FlashcardSet[]>([]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'flashcardsets'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const sets = querySnapshot.docs.map(doc => {
+        // Add debug logging for received data
+        console.log('Firestore document:', {
+          id: doc.id,
+          data: doc.data(),
+          cardsCount: doc.data().flashcards?.length || 0,
+          storedCount: doc.data().numberOfCards || 0
+        });
+        
+        return {
+          id: doc.id,
+          ...doc.data()
+        } as FlashcardSet;
+      });
+      setFlashcardSets(sets);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const toggleSet = (id: string) => {
     const newSelected = new Set(selectedSets);
@@ -42,10 +58,10 @@ export function FlashcardSets() {
   };
 
   const toggleAll = () => {
-    if (selectedSets.size === mockSets.length) {
+    if (selectedSets.size === flashcardSets.length) {
       setSelectedSets(new Set());
     } else {
-      setSelectedSets(new Set(mockSets.map(set => set.id)));
+      setSelectedSets(new Set(flashcardSets.map(set => set.id)));
     }
   };
 
@@ -59,6 +75,134 @@ export function FlashcardSets() {
     navigate(`/flashcards/${id}`);
   };
 
+  const formatDate = (timestamp: Timestamp) => {
+    if (!timestamp) return 'N/A';
+    return new Date(timestamp.toDate()).toLocaleDateString();
+  };
+
+  const handleSaveFlashcardSet = async (setData: Partial<FlashcardSet>) => {
+    try {
+      // Validate input structure
+      if (!setData || typeof setData !== 'object') {
+        throw new Error('Invalid set data structure');
+      }
+
+      // Process flashcards array with proper JSON parsing
+      const rawFlashcards = Array.isArray(setData.flashcards) ? setData.flashcards : [];
+
+      // Function to clean and parse JSON string
+      const parseJsonSafely = (jsonString: string) => {
+        try {
+          // First, try to parse the entire array if it looks like one
+          if (typeof jsonString === 'string' && jsonString.trim().startsWith('[') && jsonString.trim().endsWith(']')) {
+            // Clean the array string
+            const cleanedArrayString = jsonString
+              .replace(/\\"/g, '"') // Replace escaped quotes
+              .replace(/\\/g, '') // Remove other escapes
+              .replace(/\n/g, '') // Remove newlines
+              .replace(/\r/g, '') // Remove carriage returns
+              .trim();
+
+            // Parse the cleaned array
+            const parsedArray = JSON.parse(cleanedArrayString);
+            if (Array.isArray(parsedArray)) {
+              return parsedArray.map(item => ({
+                question: String(item?.question || '').trim(),
+                answer: String(item?.answer || '').trim()
+              }));
+            }
+          }
+
+          // If not an array or array parsing failed, try as single object
+          const cleaned = jsonString
+            .replace(/\\"/g, '"')
+            .replace(/\\/g, '')
+            .replace(/^"|"$/g, '')
+            .replace(/\\n/g, ' ')
+            .trim();
+
+          const parsed = JSON.parse(cleaned);
+          return parsed;
+        } catch (err) {
+          console.warn('Failed to parse JSON:', err);
+          return null;
+        }
+      };
+
+      const validFlashcards = rawFlashcards
+        .map(card => {
+          try {
+            if (typeof card === 'string') {
+              const parsed = parseJsonSafely(card);
+              if (Array.isArray(parsed)) {
+                return parsed;
+              }
+              if (parsed?.question && parsed?.answer) {
+                return {
+                  question: String(parsed.question).trim(),
+                  answer: String(parsed.answer).trim()
+                };
+              }
+            } else if (typeof card === 'object' && card !== null) {
+              return {
+                question: String(card.question || '').trim(),
+                answer: String(card.answer || '').trim()
+              };
+            }
+            return null;
+          } catch (err) {
+            console.warn('Failed to process flashcard:', err, 'Card data:', card);
+            return null;
+          }
+        })
+        .filter((card): card is { question: string; answer: string } | Array<{ question: string; answer: string }> => 
+          card !== null
+        )
+        .flat()
+        .filter((card): card is { question: string; answer: string } =>
+          typeof card === 'object' &&
+          card !== null &&
+          typeof card.question === 'string' &&
+          typeof card.answer === 'string' &&
+          card.question.length > 0 &&
+          card.answer.length > 0
+        );
+
+      if (validFlashcards.length === 0) {
+        throw new Error('No valid flashcards could be parsed from the input');
+      }
+
+      console.log('Validated flashcards:', validFlashcards);
+      console.log('Calculated count:', validFlashcards.length);
+
+      // Force include numberOfCards with explicit type
+      const docData = {
+        title: String(setData.title || 'Untitled Set').substring(0, 100),
+        description: String(setData.description || '').substring(0, 500),
+        flashcards: validFlashcards,
+        numberOfCards: validFlashcards.length,
+        userId: "currentUserId",
+        sourceFiles: Array.isArray(setData.sourceFiles) ? setData.sourceFiles : [],
+        createdAt: serverTimestamp(),
+        lastModified: serverTimestamp()
+      };
+
+      // Sanitize the data before saving
+      const sanitizedData = JSON.parse(JSON.stringify(docData));
+      
+      // Debug output
+      console.log('Final document data:', sanitizedData);
+      
+      const docRef = await addDoc(collection(db, 'flashcardsets'), sanitizedData);
+      console.log('Saved document:', await getDoc(docRef));
+      
+      return docRef.id;
+    } catch (error) {
+      console.error('Save error:', error);
+      throw new Error(`Failed to save flashcard set: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -69,7 +213,7 @@ export function FlashcardSets() {
             className="gap-2"
             onClick={toggleAll}
           >
-            {selectedSets.size === mockSets.length ? (
+            {selectedSets.size === flashcardSets.length ? (
               <CheckSquare className="h-4 w-4 text-[#00A6B2]" />
             ) : (
               <Square className="h-4 w-4" />
@@ -89,7 +233,7 @@ export function FlashcardSets() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {mockSets.map((set) => {
+        {flashcardSets.map((set) => {
           const isSelected = selectedSets.has(set.id);
           return (
             <PatternCard 
@@ -112,8 +256,8 @@ export function FlashcardSets() {
                     )}
                   </div>
                   <div className="space-y-2 text-sm text-[#C0C0C0]">
-                    <p>{set.cardCount} Cards</p>
-                    <p>Created At: {set.createdAt}</p>
+                    <p>{set.numberOfCards} Cards</p>
+                    <p>Created: {formatDate(set.createdAt)}</p>
                   </div>
                   <div className="flex justify-between pt-4">
                     <Button 
@@ -131,11 +275,11 @@ export function FlashcardSets() {
                       className="gap-1 hover:text-[#00A6B2]"
                       onClick={(e) => {
                         e.stopPropagation();
-                        // Handle edit logic
+                        handleSaveFlashcardSet(set);
                       }}
                     >
                       <Edit2 className="h-4 w-4" />
-                      Edit
+                      Save
                     </Button>
                     <Button 
                       variant="ghost" 
@@ -167,6 +311,13 @@ export function FlashcardSets() {
           <Button variant="outline">Next</Button>
         </nav>
       </div>
+
+      <Button 
+        variant="outline"
+        onClick={() => handleSaveFlashcardSet(flashcardSets[0])}
+      >
+        Test Save
+      </Button>
     </div>
   );
 }

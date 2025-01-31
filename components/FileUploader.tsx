@@ -2,10 +2,14 @@ const handleGenerateFlashcards = async (text: string) => {
   try {
     const generatedCards = await generateFlashcardsFromText(text);
     
-    // Save to Firestore
-    const docRef = await addDoc(collection(db, 'flashcards'), {
-      cards: generatedCards,
+    // Update field name to 'flashcards' to match interface
+    const docRef = await addDoc(collection(db, 'flashcardsets'), {
+      title: 'Generated Set',
+      flashcards: generatedCards,
+      numberOfCards: generatedCards.length,
+      userId: "currentUserId",
       createdAt: serverTimestamp(),
+      sourceFiles: []
     });
 
     // If you need to store files in Firebase Storage:

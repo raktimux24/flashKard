@@ -20,63 +20,6 @@ const SYSTEM_PROMPT = `You create concise flashcards. Follow these rules:
 4. Be clear and specific
 Example: [{"question":"What is X?","answer":"X is Y"}]`;
 
-const fetchOptions = {
-  mode: 'cors' as const,
-  credentials: 'include' as const,
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json'
-  }
-};
-
-const chunkText = (text: string): string[] => {
-  // Very small chunk size
-  const maxChunkSize = 200;
-  const chunks: string[] = [];
-  
-  // Split by sections and sentences
-  const sections = text.split(/\n\n+/);
-  
-  for (const section of sections) {
-    if (!section.trim()) continue;
-    
-    // Split into sentences
-    const sentences = section.split(/[.!?]+\s+/);
-    let currentChunk = '';
-    
-    for (const sentence of sentences) {
-      const trimmedSentence = sentence.trim();
-      if (!trimmedSentence) continue;
-      
-      if ((currentChunk + trimmedSentence).length > maxChunkSize) {
-        if (currentChunk) chunks.push(currentChunk.trim());
-        // If a single sentence is too long, split it into phrases
-        if (trimmedSentence.length > maxChunkSize) {
-          const phrases = trimmedSentence.split(/[,;]\s+/);
-          let phraseChunk = '';
-          for (const phrase of phrases) {
-            if ((phraseChunk + phrase).length > maxChunkSize) {
-              if (phraseChunk) chunks.push(phraseChunk.trim());
-              phraseChunk = phrase;
-            } else {
-              phraseChunk += (phraseChunk ? ', ' : '') + phrase;
-            }
-          }
-          if (phraseChunk) chunks.push(phraseChunk.trim());
-        } else {
-          currentChunk = trimmedSentence;
-        }
-      } else {
-        currentChunk += (currentChunk ? '. ' : '') + trimmedSentence;
-      }
-    }
-    
-    if (currentChunk) chunks.push(currentChunk.trim());
-  }
-  
-  return chunks.filter(chunk => chunk.length > 0);
-};
-
 const MAX_CHUNK_LENGTH = 15000; // ~15k characters
 
 const MAX_RETRIES = 5;
@@ -90,63 +33,52 @@ let rateLimit: RateLimitState = {
 let retryCount = 0;
 
 // Enhanced token estimation using GPT-4 encoding (conservative estimate)
-const estimateTokens = (text: string) => Math.ceil(text.length * 0.27);
-
-// Precision error parsing
-const parseRateLimitError = (error: any) => {
-  const errorMessage = error.details?.error?.message || '';
-  const tokenMatch = errorMessage.match(/Used (\d+), Requested (\d+)/);
-  const timeMatch = errorMessage.match(/try again in (\d+\.?\d*)s/);
-
-  if (tokenMatch && timeMatch) {
-    const used = parseInt(tokenMatch[1]);
-    const requested = parseInt(tokenMatch[2]);
-    const waitSeconds = parseFloat(timeMatch[1]);
-
-    rateLimit = {
-      remaining: Math.max(0, 5000 - used - requested),
-      reset: Date.now() + waitSeconds * 1000
-    };
-    return waitSeconds * 1000;
-  }
-  return null;
-};
-
-async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
-  let attempt = 1;
-  while (attempt <= MAX_RETRIES) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const statusError = error as { status: number };
-        if (statusError.status !== 429 || attempt >= MAX_RETRIES) throw error;
-      }
-      
-      const waitTime = parseRateLimitError(error) || 
-        Math.pow(2, attempt) * 1000 + Math.random() * 2000;
-
-      rateLimit.remaining = 0;
-      rateLimit.reset = Date.now() + waitTime;
-      
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-      attempt++;
-    }
-  }
-  throw new Error('Max retries exceeded');
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length * 0.27);
 }
 
-async function callGroqAPI(chunk: string) {
-  const estimatedTokens = estimateTokens(chunk);
+// Precision error parsing
+function parseRateLimitError(error: any): RateLimitState | null {
+  try {
+    if (error?.response?.headers) {
+      return {
+        remaining: parseInt(error.response.headers['x-ratelimit-remaining'] || '0'),
+        reset: parseInt(error.response.headers['x-ratelimit-reset'] || '0')
+      };
+    }
+  } catch (e) {
+    console.error('Error parsing rate limit headers:', e);
+  }
+  return null;
+}
+
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let lastError: Error | null = null;
   
-  if (rateLimit.remaining < estimatedTokens) {
-    const delay = Math.max(
-      rateLimit.reset - Date.now(),
-      Math.pow(2, retryCount) * 1000 + Math.random() * 2000
-    );
-    await new Promise(resolve => setTimeout(resolve, delay));
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      const rateLimitInfo = parseRateLimitError(error);
+      
+      if (rateLimitInfo) {
+        const waitTime = (rateLimitInfo.reset * 1000) - Date.now();
+        if (waitTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+      }
+      
+      const delay = Math.min(BASE_DELAY * Math.pow(2, attempt - 1), 30000);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
   
+  throw lastError || new Error('Max retries exceeded');
+}
+
+async function callGroqAPI(chunk: string): Promise<Response> {
   const response = await fetch(API_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -163,11 +95,11 @@ async function callGroqAPI(chunk: string) {
     })
   });
 
-  // Update rate limit state
-  rateLimit = {
-    remaining: parseInt(response.headers.get('x-ratelimit-remaining') || '1'),
-    reset: parseInt(response.headers.get('x-ratelimit-reset') || `${Date.now() + 1000}`) * 1000
-  };
+  if (!response.ok) {
+    const error = new Error(`API request failed: ${response.status}`);
+    (error as any).response = response;
+    throw error;
+  }
 
   return response;
 }
@@ -193,34 +125,64 @@ export async function generateFlashcardsFromText(text: string): Promise<Flashcar
       throw new Error('Invalid response format from API');
     }
 
-    const flashcardsText = data.choices[0].message.content.trim();
-    console.log('Raw API response content:', flashcardsText);
+    const content = data.choices[0].message.content.trim();
+    console.log('Raw API response content:', content);
     
     try {
-      // Remove any potential markdown code block markers
-      const cleanJson = flashcardsText
-        .replace(/```json\s*/g, '')
-        .replace(/```\s*$/g, '')
-        .trim();
+      // Preprocess the content to fix common JSON formatting issues
+      const preprocessed = content
+        // Convert ["key":"value"] to {"key":"value"}
+        .replace(/\[(\s*"[^"]+"\s*:\s*"[^"]+"\s*,?\s*)+\]/g, match => 
+          match.replace(/^\[/, '{').replace(/\]$/, '}')
+        )
+        // Fix missing quotes around property names
+        .replace(/([{,]\s*)(\w+):/g, '$1"$2":')
+        // Fix missing quotes after colons
+        .replace(/:([^",\s\d][^,}\]]*[,}\]])/g, ':"$1')
+        // Remove any trailing commas
+        .replace(/,(\s*[}\]])/g, '$1');
+
+      console.log('Preprocessed content:', preprocessed);
+
+      // Parse the JSON content
+      const flashcards = JSON.parse(preprocessed);
       
-      console.log('Cleaned JSON:', cleanJson);
-      const flashcards = JSON.parse(cleanJson);
-      
-      if (!Array.isArray(flashcards) || !flashcards.every(card => 
-        typeof card === 'object' && 
-        'question' in card && 
-        'answer' in card
-      )) {
-        throw new Error('Invalid flashcard format');
+      if (!Array.isArray(flashcards)) {
+        throw new Error('Generated content is not an array of flashcards');
       }
-      
-      return flashcards;
+
+      // Validate and clean each flashcard
+      const validFlashcards = flashcards
+        .filter((card): card is Flashcard => {
+          const isValid = (
+            typeof card === 'object' &&
+            card !== null &&
+            typeof card.question === 'string' &&
+            typeof card.answer === 'string' &&
+            card.question.trim() !== '' &&
+            card.answer.trim() !== ''
+          );
+          if (!isValid) {
+            console.log('Invalid flashcard:', card);
+          }
+          return isValid;
+        })
+        .map(card => ({
+          question: card.question.trim(),
+          answer: card.answer.trim()
+        }));
+
+      if (validFlashcards.length === 0) {
+        throw new Error('No valid flashcards generated');
+      }
+
+      return validFlashcards;
     } catch (parseError) {
-      console.error('Error parsing flashcards:', parseError, flashcardsText);
-      throw new Error('Failed to parse generated flashcards');
+      console.error('Error parsing flashcards:', parseError, content);
+      throw parseError;
     }
   });
 
-  const chunkResults = await Promise.all(chunkPromises);
-  return chunkResults.flat();
+  const results = await Promise.all(chunkPromises);
+  return results.flat();
 }
