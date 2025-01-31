@@ -7,6 +7,7 @@ import type { ErrorRequestHandler } from 'express';
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import flashcardsRouter from './routes/flashcards';
 
 // ES module compatibility
 const __filename = fileURLToPath(import.meta.url);
@@ -147,6 +148,9 @@ app.post('/api/groq/*', async (req, res) => {
     });
   }
 });
+
+// Routes
+app.use('/api/flashcards', flashcardsRouter);
 
 // Flashcard Set Routes
 app.post('/api/flashcard-sets', async (req, res) => {

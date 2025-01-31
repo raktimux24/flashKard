@@ -109,13 +109,18 @@ export async function generateFlashcardsFromText(text: string): Promise<Flashcar
     .replace(/\s+/g, ' ') // Reduce whitespace
     .substring(0, 50000); // Hard limit for safety
 
-  const chunks = [];
-  for (let i = 0; i < cleanedText.length; i += MAX_CHUNK_LENGTH) {
-    chunks.push(cleanedText.substring(i, i + MAX_CHUNK_LENGTH));
-  }
+  try {
+    const response = await fetch(`${API_BASE_URL}/flashcards/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text: cleanedText }),
+    });
 
-  const chunkPromises = chunks.map(async (chunk, index) => {
-    const response = await withRetry(async () => await callGroqAPI(chunk));
+    if (!response.ok) {
+      throw new Error('Failed to generate flashcards');
+    }
 
     const data = await response.json();
     console.log('Full API response:', JSON.stringify(data, null, 2));
@@ -129,60 +134,32 @@ export async function generateFlashcardsFromText(text: string): Promise<Flashcar
     console.log('Raw API response content:', content);
     
     try {
-      // Preprocess the content to fix common JSON formatting issues
-      const preprocessed = content
-        // Convert ["key":"value"] to {"key":"value"}
-        .replace(/\[(\s*"[^"]+"\s*:\s*"[^"]+"\s*,?\s*)+\]/g, (match: string) => 
-          match.replace(/^\[/, '{').replace(/\]$/, '}')
-        )
-        // Fix missing quotes around property names
-        .replace(/([{,]\s*)(\w+):/g, '$1"$2":')
-        // Fix missing quotes after colons
-        .replace(/:([^",\s\d][^,}\]]*[,}\]])/g, ':"$1')
-        // Remove any trailing commas
-        .replace(/,(\s*[}\]])/g, '$1');
-
-      console.log('Preprocessed content:', preprocessed);
-
-      // Parse the JSON content
-      const flashcards = JSON.parse(preprocessed);
-      
-      if (!Array.isArray(flashcards)) {
-        throw new Error('Generated content is not an array of flashcards');
-      }
-
-      // Validate and clean each flashcard
-      const validFlashcards = flashcards
-        .filter((card): card is Flashcard => {
-          const isValid = (
-            typeof card === 'object' &&
-            card !== null &&
-            typeof card.question === 'string' &&
-            typeof card.answer === 'string' &&
-            card.question.trim() !== '' &&
-            card.answer.trim() !== ''
-          );
-          if (!isValid) {
-            console.log('Invalid flashcard:', card);
-          }
-          return isValid;
-        })
-        .map(card => ({
-          question: card.question.trim(),
-          answer: card.answer.trim()
+      // Try to parse as JSON first
+      const parsedContent = JSON.parse(content);
+      if (Array.isArray(parsedContent)) {
+        return parsedContent.map(card => ({
+          question: card.question || card.front || '',
+          answer: card.answer || card.back || ''
         }));
-
-      if (validFlashcards.length === 0) {
-        throw new Error('No valid flashcards generated');
       }
-
-      return validFlashcards;
-    } catch (parseError) {
-      console.error('Error parsing flashcards:', parseError, content);
-      throw parseError;
+    } catch (e) {
+      // If JSON parsing fails, try to parse the text format
+      const cards = content
+        .split(/\n\s*\n/)
+        .filter(block => block.trim())
+        .map(block => {
+          const [question, ...answerParts] = block.split(/\n/);
+          return {
+            question: question.replace(/^Q:|Question:|^\d+\.|^-/, '').trim(),
+            answer: answerParts.join('\n').replace(/^A:|Answer:|^\d+\.|^-/, '').trim()
+          };
+        });
+      return cards;
     }
-  });
-
-  const results = await Promise.all(chunkPromises);
-  return results.flat();
+  } catch (error) {
+    console.error('Error generating flashcards:', error);
+    throw error;
+  }
+  
+  return [];
 }
