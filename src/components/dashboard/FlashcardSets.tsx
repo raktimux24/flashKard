@@ -9,6 +9,7 @@ import { db } from '../../lib/firebase';
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '../../store/authStore';
 import { Loader2, File } from 'lucide-react';
+import { useStatistics } from '../../hooks/useStatistics';
 
 interface FlashcardSet {
   id: string;
@@ -29,6 +30,7 @@ export function FlashcardSets() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const user = useAuthStore(state => state.user);
+  const { incrementStatistic } = useStatistics();
 
   useEffect(() => {
     console.log('FlashcardSets component state:', {
@@ -121,9 +123,31 @@ export function FlashcardSets() {
     }
   };
 
-  const handleExportSelected = () => {
-    // Handle export logic here
-    console.log('Exporting sets:', Array.from(selectedSets));
+  const handleExportSelected = async () => {
+    if (selectedSets.size === 0) return;
+
+    const exportData = flashcardSets
+      .filter(set => selectedSets.has(set.id))
+      .map(set => ({
+        title: set.title,
+        flashcards: set.flashcards
+      }));
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: 'application/json'
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'flashcard-sets.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    // Update export statistics
+    incrementStatistic('totalExports');
   };
 
   const handleView = (e: React.MouseEvent, id: string) => {

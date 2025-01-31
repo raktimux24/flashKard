@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText, Book, Upload, Clock } from 'lucide-react';
 import { PatternCard, PatternCardBody } from '../ui/card-with-ellipsis-pattern';
+import { useStatistics } from '../../hooks/useStatistics';
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -30,10 +31,12 @@ function StatCard({ icon, label, value }: StatCardProps) {
 }
 
 export function DashboardHeader() {
+  const { statistics, isLoading } = useStatistics();
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-[#EAEAEA]">Welcome back, {import.meta.env.AUTH_USER_DISPLAY_NAME}!</h1>
+        <h1 className="text-3xl font-bold text-[#EAEAEA]">Welcome back!</h1>
         <p className="text-[#C0C0C0] mt-2">Here's an overview of your learning progress</p>
       </div>
 
@@ -41,24 +44,34 @@ export function DashboardHeader() {
         <StatCard
           icon={<Book className="h-6 w-6 text-[#00A6B2]" />}
           label="Flashcard Sets"
-          value="25"
+          value={isLoading ? '...' : statistics?.totalFlashcardSets.toString() || '0'}
         />
         <StatCard
           icon={<FileText className="h-6 w-6 text-[#00A6B2]" />}
           label="Total Flashcards"
-          value="500"
+          value={isLoading ? '...' : statistics?.totalFlashcards.toString() || '0'}
         />
         <StatCard
           icon={<Upload className="h-6 w-6 text-[#00A6B2]" />}
           label="Files Uploaded"
-          value="20"
+          value={isLoading ? '...' : statistics?.filesUploaded.toString() || '0'}
         />
         <StatCard
           icon={<Clock className="h-6 w-6 text-[#00A6B2]" />}
-          label="Last Active"
-          value="Today"
+          label="Study Time"
+          value={isLoading ? '...' : formatStudyTime(statistics?.totalStudyTime || 0)}
         />
       </div>
     </div>
   );
+}
+
+function formatStudyTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
 }

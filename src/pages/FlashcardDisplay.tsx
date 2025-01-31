@@ -10,6 +10,7 @@ import { PatternCard, PatternCardBody } from '../components/ui/card-with-ellipsi
 import { db } from '../lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
+import { useStatistics } from '../hooks/useStatistics';
 
 interface Flashcard {
   question: string;
@@ -37,6 +38,8 @@ export function FlashcardDisplay({ flashcards, title }: FlashcardDisplayProps) {
   const [error, setError] = useState<string | null>(null);
   const [flashcardSet, setFlashcardSet] = useState<FlashcardSet | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const { incrementStatistic, addStudyTime } = useStatistics();
 
   useEffect(() => {
     async function fetchFlashcards() {
@@ -66,8 +69,17 @@ export function FlashcardDisplay({ flashcards, title }: FlashcardDisplayProps) {
     fetchFlashcards();
   }, [id]);
 
+  useEffect(() => {
+    const startTime = Date.now();
+    return () => {
+      const studyTime = Math.floor((Date.now() - startTime) / 1000);
+      addStudyTime(studyTime);
+    };
+  }, [addStudyTime]);
+
   const handleNext = () => {
     if (flashcardSet && currentIndex < flashcardSet.flashcards.length - 1) {
+      incrementStatistic('flashcardsReviewedToday');
       setCurrentIndex(currentIndex + 1);
     }
   };

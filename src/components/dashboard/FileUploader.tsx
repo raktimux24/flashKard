@@ -9,6 +9,7 @@ import { generateFlashcardsFromText } from '../../lib/groq';
 import { db } from '../../lib/firebase';
 import { useAuthStore } from '../../store/authStore';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useStatistics } from '../../hooks/useStatistics';
 
 interface UploadedFile {
   id: string;
@@ -33,6 +34,7 @@ export function FileUploader() {
   const [generatedCards, setGeneratedCards] = useState<Flashcard[] | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const user = useAuthStore(state => state.user);
+  const { incrementStatistic, statisticsService } = useStatistics();
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -237,22 +239,27 @@ export function FileUploader() {
     setError(null);
 
     try {
-      console.log('Saving flashcards to Firestore...');
-      console.log('User ID:', user.uid);
-      console.log('Generated cards:', generatedCards);
+      const fileNames = files.map(f => f.file.name);
       
       const docRef = await addDoc(collection(db, 'flashcardsets'), {
-        title: files[0].file.name.split('.')[0],
+        title: `Generated Flashcards ${new Date().toLocaleDateString()}`,
+        description: `Generated from: ${fileNames.join(', ')}`,
         flashcards: generatedCards,
         numberOfCards: generatedCards.length,
         userId: user.uid,
         createdAt: serverTimestamp(),
-        sourceFiles: files.map(f => f.file.name),
+        sourceFiles: fileNames,
       });
 
-      console.log('Successfully saved flashcards with ID:', docRef.id);
-      navigate(`/dashboard/flashcards/${docRef.id}`);
-    } catch (error: any) {
+      // Update statistics
+      incrementStatistic('totalFlashcardSets');
+      await statisticsService.updateStatistic(user.uid, 'totalFlashcards', (prev) => prev + generatedCards.length);
+      files.forEach(() => {
+        incrementStatistic('filesUploaded');
+      });
+
+      navigate(`/flashcards/${docRef.id}`);
+    } catch (error) {
       console.error('Error saving flashcards:', error);
       setError(
         error instanceof Error 
