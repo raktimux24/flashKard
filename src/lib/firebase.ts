@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, updateProfile } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -21,6 +21,33 @@ export const signUp = async (email: string, password: string, name: string) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(userCredential.user, { displayName: name });
+    
+    // Create user document in Firestore
+    const userDoc = doc(db, 'users', userCredential.user.uid);
+    const userData = {
+      name,
+      email,
+      createdAt: serverTimestamp(),
+      flashcardSets: 0,
+      totalFlashcards: 0,
+      filesUploaded: 0,
+      lastActive: serverTimestamp(),
+    };
+    await setDoc(userDoc, userData);
+
+    // Initialize statistics document
+    const statsDoc = doc(db, 'userStatistics', userCredential.user.uid);
+    const initialStats = {
+      totalFlashcardSets: 0,
+      totalFlashcards: 0,
+      filesUploaded: 0,
+      lastActive: serverTimestamp(),
+      flashcardsReviewedToday: 0,
+      totalStudyTime: 0,
+      totalExports: 0,
+    };
+    await setDoc(statsDoc, initialStats);
+
     return { user: userCredential.user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message };
@@ -31,10 +58,16 @@ export const signIn = async (email: string, password: string) => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     
-    // Update last active timestamp
+    // Update last active timestamp in users collection
     const userDoc = doc(db, 'users', userCredential.user.uid);
     await updateDoc(userDoc, {
-      lastActive: new Date().toISOString()
+      lastActive: serverTimestamp(),
+    });
+
+    // Update last active timestamp in userStatistics collection
+    const statsDoc = doc(db, 'userStatistics', userCredential.user.uid);
+    await updateDoc(statsDoc, {
+      lastActive: serverTimestamp(),
     });
 
     return { user: userCredential.user, error: null };
@@ -69,6 +102,43 @@ export const signInWithGoogle = async () => {
   try {
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(auth, provider);
+    
+    // Check if user document exists
+    const userDoc = doc(db, 'users', result.user.uid);
+    const userSnap = await getDoc(userDoc);
+
+    if (!userSnap.exists()) {
+      // Create user document if it doesn't exist
+      const userData = {
+        name: result.user.displayName || '',
+        email: result.user.email || '',
+        createdAt: serverTimestamp(),
+        flashcardSets: 0,
+        totalFlashcards: 0,
+        filesUploaded: 0,
+        lastActive: serverTimestamp(),
+      };
+      await setDoc(userDoc, userData);
+
+      // Initialize statistics document
+      const statsDoc = doc(db, 'userStatistics', result.user.uid);
+      const initialStats = {
+        totalFlashcardSets: 0,
+        totalFlashcards: 0,
+        filesUploaded: 0,
+        lastActive: serverTimestamp(),
+        flashcardsReviewedToday: 0,
+        totalStudyTime: 0,
+        totalExports: 0,
+      };
+      await setDoc(statsDoc, initialStats);
+    } else {
+      // Update last active timestamp
+      await updateDoc(userDoc, {
+        lastActive: serverTimestamp(),
+      });
+    }
+
     return { user: result.user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message };

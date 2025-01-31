@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, increment, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { UserStatistics } from '../store/statisticsStore';
 
@@ -42,21 +42,32 @@ export const statisticsService = {
       const docRef = doc(db, STATISTICS_COLLECTION, userId);
       
       if (typeof value === 'function') {
-        const currentStats = await this.getUserStatistics(userId);
-        if (!currentStats) return;
-        
-        const currentValue = currentStats[key] as number;
+        const currentValue = (await getDoc(docRef)).data()?.[key] as number || 0;
         const newValue = value(currentValue);
         
-        await updateDoc(docRef, {
-          [key]: newValue,
-          lastActive: serverTimestamp(),
-        });
+        const updateData: Partial<UserStatistics> = {
+          lastActive: serverTimestamp() as unknown as Timestamp,
+        };
+
+        if (key === 'lastActive') {
+          updateData[key] = newValue as unknown as Timestamp;
+        } else {
+          updateData[key] = newValue;
+        }
+
+        await updateDoc(docRef, updateData);
       } else {
-        await updateDoc(docRef, {
-          [key]: value,
-          lastActive: serverTimestamp(),
-        });
+        const updateData: Partial<UserStatistics> = {
+          lastActive: serverTimestamp() as unknown as Timestamp,
+        };
+
+        if (key === 'lastActive') {
+          updateData[key] = value as unknown as Timestamp;
+        } else {
+          updateData[key] = value;
+        }
+
+        await updateDoc(docRef, updateData);
       }
     } catch (error) {
       console.error('Error updating statistic:', error);
@@ -64,18 +75,39 @@ export const statisticsService = {
     }
   },
 
-  async incrementStatistic(
+  async batchUpdateStatistics(
     userId: string,
-    key: keyof UserStatistics
+    updates: { key: keyof UserStatistics; value: number | ((prev: number) => number) }[]
   ): Promise<void> {
     try {
       const docRef = doc(db, STATISTICS_COLLECTION, userId);
-      await updateDoc(docRef, {
-        [key]: increment(1),
-        lastActive: serverTimestamp(),
-      });
+      const currentStats = await this.getUserStatistics(userId);
+      if (!currentStats) return;
+
+      const updateData: Partial<UserStatistics> = {
+        lastActive: serverTimestamp() as unknown as Timestamp,
+      };
+
+      for (const update of updates) {
+        if (typeof update.value === 'function') {
+          const currentValue = (await getDoc(docRef)).data()?.[update.key] as number || 0;
+          if (update.key === 'lastActive') {
+            updateData[update.key] = update.value(currentValue) as unknown as Timestamp;
+          } else {
+            updateData[update.key] = update.value(currentValue);
+          }
+        } else {
+          if (update.key === 'lastActive') {
+            updateData[update.key] = update.value as unknown as Timestamp;
+          } else {
+            updateData[update.key] = update.value;
+          }
+        }
+      }
+
+      await updateDoc(docRef, updateData);
     } catch (error) {
-      console.error('Error incrementing statistic:', error);
+      console.error('Error batch updating statistics:', error);
       throw error;
     }
   },
@@ -88,7 +120,7 @@ export const statisticsService = {
         lastActive: serverTimestamp(),
       });
     } catch (error) {
-      console.error('Error updating study time:', error);
+      console.error('Error adding study time:', error);
       throw error;
     }
   },
@@ -103,5 +135,34 @@ export const statisticsService = {
       console.error('Error resetting daily statistics:', error);
       throw error;
     }
+  },
+
+  subscribeToStatistics(userId: string, callback: (stats: UserStatistics | null) => void) {
+    const docRef = doc(db, STATISTICS_COLLECTION, userId);
+    return onSnapshot(docRef, 
+      (snapshot) => {
+        if (snapshot.exists()) {
+          callback(snapshot.data() as UserStatistics);
+        } else {
+          // Initialize statistics if they don't exist
+          const initialStats: UserStatistics = {
+            totalFlashcardSets: 0,
+            totalFlashcards: 0,
+            filesUploaded: 0,
+            lastActive: null,
+            flashcardsReviewedToday: 0,
+            totalStudyTime: 0,
+            totalExports: 0,
+          };
+          setDoc(docRef, initialStats)
+            .then(() => callback(initialStats))
+            .catch((error) => console.error('Error initializing statistics:', error));
+        }
+      },
+      (error) => {
+        console.error('Error subscribing to statistics:', error);
+        callback(null);
+      }
+    );
   },
 };

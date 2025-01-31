@@ -1,15 +1,45 @@
 import React from 'react';
 import { Book, FileText, Upload, Clock, Brain, Timer, FileDown, Database } from 'lucide-react';
 import { PatternCard, PatternCardBody } from '../ui/card-with-ellipsis-pattern';
+import { useQuery } from '@tanstack/react-query';
+import { formatDistanceToNow } from 'date-fns';
+import { Skeleton } from '../ui/skeleton';
+import { statisticsService } from '../../services/statisticsService';
+import { useAuthStore } from '../../store/authStore';
+
+interface UsageStats {
+  flashcardSets: number;
+  totalFlashcards: number;
+  filesUploaded: number;
+  lastActive: string;
+  flashcardsReviewedToday: number;
+  totalStudyTimeThisWeek: number;
+  pdfsExported: number;
+  ankiExports: number;
+}
 
 interface StatCardProps {
   icon: React.ReactNode;
   label: string;
   value: string | number;
   description?: string;
+  isLoading?: boolean;
 }
 
-function StatCard({ icon, label, value, description }: StatCardProps) {
+const StatCard = ({ icon, label, value, description, isLoading }: StatCardProps) => {
+  if (isLoading) {
+    return (
+      <div className="flex items-start gap-4">
+        <Skeleton className="rounded-full h-12 w-12" />
+        <div className="space-y-2 w-full">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-8 w-32" />
+          {description && <Skeleton className="h-4 w-40" />}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-start gap-4">
       <div className="rounded-full bg-[#00A6B2]/10 p-3">
@@ -26,7 +56,51 @@ function StatCard({ icon, label, value, description }: StatCardProps) {
   );
 }
 
-export function UsageStatistics() {
+const fetchUsageStats = async (userId: string): Promise<UsageStats> => {
+  if (!userId) {
+    throw new Error('User not authenticated');
+  }
+  
+  const stats = await statisticsService.getUserStatistics(userId);
+  if (!stats) {
+    throw new Error('Failed to fetch usage statistics');
+  }
+
+  return {
+    flashcardSets: stats.totalFlashcardSets,
+    totalFlashcards: stats.totalFlashcards,
+    filesUploaded: stats.filesUploaded,
+    lastActive: stats.lastActive ? new Date(stats.lastActive.seconds * 1000).toISOString() : new Date().toISOString(),
+    flashcardsReviewedToday: stats.flashcardsReviewedToday,
+    totalStudyTimeThisWeek: stats.totalStudyTime / 3600, // Convert seconds to hours
+    pdfsExported: stats.totalExports,
+    ankiExports: 0 // This might need to be added to the statistics model if needed
+  };
+};
+
+export const UsageStatistics = () => {
+  const user = useAuthStore(state => state.user);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['usage-statistics', user?.uid],
+    queryFn: () => fetchUsageStats(user?.uid || ''),
+    enabled: !!user?.uid,
+  });
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-500/10 border border-red-500 rounded-lg">
+        <p className="text-red-500">Failed to load usage statistics</p>
+      </div>
+    );
+  }
+
+  const formatStudyTime = (hours: number) => {
+    if (hours < 1) {
+      return `${Math.round(hours * 60)} minutes`;
+    }
+    return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  };
+
   return (
     <div className="space-y-6">
       {/* Flashcard Activity */}
@@ -41,23 +115,27 @@ export function UsageStatistics() {
               <StatCard
                 icon={<Book className="h-6 w-6 text-[#00A6B2]" />}
                 label="Flashcard Sets"
-                value="25"
+                value={data?.flashcardSets ?? 0}
+                isLoading={isLoading}
               />
               <StatCard
                 icon={<FileText className="h-6 w-6 text-[#00A6B2]" />}
                 label="Total Flashcards"
-                value="500"
+                value={data?.totalFlashcards ?? 0}
+                isLoading={isLoading}
               />
               <StatCard
                 icon={<Upload className="h-6 w-6 text-[#00A6B2]" />}
                 label="Files Uploaded"
-                value="20"
+                value={data?.filesUploaded ?? 0}
+                isLoading={isLoading}
               />
               <StatCard
                 icon={<Clock className="h-6 w-6 text-[#00A6B2]" />}
                 label="Last Active"
-                value="Today"
-                description="2 hours ago"
+                value={data ? formatDistanceToNow(new Date(data.lastActive), { addSuffix: true }) : 'Never'}
+                description="Last study session"
+                isLoading={isLoading}
               />
             </div>
           </div>
@@ -76,13 +154,15 @@ export function UsageStatistics() {
               <StatCard
                 icon={<Brain className="h-6 w-6 text-[#00A6B2]" />}
                 label="Flashcards Reviewed Today"
-                value="30"
+                value={data?.flashcardsReviewedToday ?? 0}
+                isLoading={isLoading}
               />
               <StatCard
                 icon={<Timer className="h-6 w-6 text-[#00A6B2]" />}
                 label="Total Study Time"
-                value="5 Hours"
+                value={data ? formatStudyTime(data.totalStudyTimeThisWeek) : '0 hours'}
                 description="This week"
+                isLoading={isLoading}
               />
             </div>
           </div>
@@ -101,12 +181,14 @@ export function UsageStatistics() {
               <StatCard
                 icon={<FileDown className="h-6 w-6 text-[#00A6B2]" />}
                 label="PDFs Exported"
-                value="10"
+                value={data?.pdfsExported ?? 0}
+                isLoading={isLoading}
               />
               <StatCard
                 icon={<Database className="h-6 w-6 text-[#00A6B2]" />}
                 label="Anki Exports"
-                value="5"
+                value={data?.ankiExports ?? 0}
+                isLoading={isLoading}
               />
             </div>
           </div>

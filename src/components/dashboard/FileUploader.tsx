@@ -10,6 +10,7 @@ import { db } from '../../lib/firebase';
 import { useAuthStore } from '../../store/authStore';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useStatistics } from '../../hooks/useStatistics';
+import { statisticsService } from '../../services/statisticsService';
 
 interface UploadedFile {
   id: string;
@@ -34,7 +35,7 @@ export function FileUploader() {
   const [generatedCards, setGeneratedCards] = useState<Flashcard[] | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const user = useAuthStore(state => state.user);
-  const { incrementStatistic, statisticsService } = useStatistics();
+  const { incrementStatistic } = useStatistics();
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -252,13 +253,13 @@ export function FileUploader() {
       });
 
       // Update statistics
-      incrementStatistic('totalFlashcardSets');
-      await statisticsService.updateStatistic(user.uid, 'totalFlashcards', (prev) => prev + generatedCards.length);
-      files.forEach(() => {
-        incrementStatistic('filesUploaded');
-      });
+      await statisticsService.batchUpdateStatistics(user.uid, [
+        { key: 'totalFlashcardSets', value: (prev) => prev + 1 },
+        { key: 'totalFlashcards', value: (prev) => prev + generatedCards.length },
+        { key: 'filesUploaded', value: (prev) => prev + files.length }
+      ]);
 
-      navigate(`/flashcards/${docRef.id}`);
+      navigate(`/dashboard/flashcards/${docRef.id}`);
     } catch (error) {
       console.error('Error saving flashcards:', error);
       setError(

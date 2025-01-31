@@ -69,13 +69,21 @@ export function FlashcardDisplay({ flashcards, title }: FlashcardDisplayProps) {
     fetchFlashcards();
   }, [id]);
 
+  // Track study time
   useEffect(() => {
+    let isActive = true;
     const startTime = Date.now();
+
     return () => {
-      const studyTime = Math.floor((Date.now() - startTime) / 1000);
-      addStudyTime(studyTime);
+      if (isActive) {
+        isActive = false;
+        const studyTime = Math.floor((Date.now() - startTime) / 1000);
+        if (studyTime > 0) {
+          addStudyTime(studyTime).catch(console.error);
+        }
+      }
     };
-  }, [addStudyTime]);
+  }, []);
 
   const handleNext = () => {
     if (flashcardSet && currentIndex < flashcardSet.flashcards.length - 1) {

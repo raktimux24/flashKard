@@ -10,6 +10,7 @@ import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '../../store/authStore';
 import { Loader2, File } from 'lucide-react';
 import { useStatistics } from '../../hooks/useStatistics';
+import { statisticsService } from '../../services/statisticsService';
 
 interface FlashcardSet {
   id: string;
@@ -160,7 +161,19 @@ export function FlashcardSets() {
     if (!confirm('Are you sure you want to delete this flashcard set?')) return;
 
     try {
+      // Get the flashcard set data before deleting
+      const setToDelete = flashcardSets.find(set => set.id === id);
+      if (!setToDelete || !user) return;
+
+      // Delete the document
       await deleteDoc(doc(db, 'flashcardsets', id));
+
+      // Update statistics
+      await statisticsService.updateStatistic(user.uid, 'totalFlashcardSets', prev => Math.max(0, prev - 1));
+      await statisticsService.updateStatistic(user.uid, 'totalFlashcards', prev => Math.max(0, prev - setToDelete.numberOfCards));
+      await statisticsService.updateStatistic(user.uid, 'filesUploaded', prev => Math.max(0, prev - (setToDelete.sourceFiles?.length || 0)));
+
+      // Update selected sets
       setSelectedSets(prev => {
         const newSelected = new Set(prev);
         newSelected.delete(id);

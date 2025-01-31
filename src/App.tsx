@@ -61,43 +61,9 @@ function App({ flashcards = [], title = 'Flashcards' }: AppProps) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  // Protected routes
-  if (location.pathname.startsWith('/dashboard') || location.pathname === '/profile') {
-    return (
-      <Routes>
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        } />
-        <Route path="/dashboard/flashcards/:id" element={
-          <ProtectedRoute>
-            <FlashcardDisplay flashcards={flashcards} title={title} />
-          </ProtectedRoute>
-        } />
-        <Route path="/profile" element={
-          <ProtectedRoute>
-            <Profile />
-          </ProtectedRoute>
-        } />
-      </Routes>
-    );
-  }
-
-  // Auth routes
-  if (['/login', '/signup', '/forgot-password'].includes(location.pathname)) {
-    return (
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      </Routes>
-    );
-  }
-
-  // Public routes
   return (
     <Routes>
+      {/* Public Routes */}
       <Route path="/" element={
         <div className="min-h-screen bg-[#121212] text-[#EAEAEA] relative overflow-hidden">
           <AnimatedGrid />
@@ -115,9 +81,33 @@ function App({ flashcards = [], title = 'Flashcards' }: AppProps) {
           </div>
         </div>
       } />
+
+      {/* Auth Routes */}
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+
+      {/* Protected Routes */}
+      <Route path="/dashboard" element={
+        <ProtectedRoute>
+          <Dashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/dashboard/flashcards/:id" element={
+        <ProtectedRoute>
+          <FlashcardDisplay flashcards={flashcards} title={title} />
+        </ProtectedRoute>
+      } />
+      <Route path="/profile" element={
+        <ProtectedRoute>
+          <Profile />
+        </ProtectedRoute>
+      } />
+
+      {/* Catch all route */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
 
-export default App
+export default App;
