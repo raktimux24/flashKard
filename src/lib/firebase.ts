@@ -1,0 +1,76 @@
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, updateProfile } from 'firebase/auth';
+import { getFirestore, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+
+// Auth functions
+export const signUp = async (email: string, password: string, name: string) => {
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(userCredential.user, { displayName: name });
+    return { user: userCredential.user, error: null };
+  } catch (error: any) {
+    return { user: null, error: error.message };
+  }
+};
+
+export const signIn = async (email: string, password: string) => {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    
+    // Update last active timestamp
+    const userDoc = doc(db, 'users', userCredential.user.uid);
+    await updateDoc(userDoc, {
+      lastActive: new Date().toISOString()
+    });
+
+    return { user: userCredential.user, error: null };
+  } catch (error: any) {
+    return { user: null, error: error.message };
+  }
+};
+
+export const logOut = async () => {
+  try {
+    await signOut(auth);
+    return { error: null };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+};
+
+// User data functions
+export const getUserData = async (userId: string) => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (userDoc.exists()) {
+      return { data: userDoc.data(), error: null };
+    }
+    return { data: null, error: 'User not found' };
+  } catch (error: any) {
+    return { data: null, error: error.message };
+  }
+};
+
+export const signInWithGoogle = async () => {
+  try {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    return { user: result.user, error: null };
+  } catch (error: any) {
+    return { user: null, error: error.message };
+  }
+};

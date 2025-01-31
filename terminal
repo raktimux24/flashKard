@@ -1,0 +1,31 @@
+# Initialize local repository
+git init
+git add .
+git commit -m "Initial commit"
+
+# Link to remote repository
+git remote add origin https://github.com/raktimux24/flashKard.git
+git branch -M main
+git push -u origin main
+
+# For HTTPS remotes - use personal access token
+git remote set-url origin https://<TOKEN>@github.com/<USERNAME>/<REPO>.git
+
+# For SSH (recommended) - generate SSH keys first
+git remote set-url origin git@github.com:<USERNAME>/<REPO>.git
+
+# Push to GitHub
+git push -u origin main
+
+git pull origin main --allow-unrelated-histories
+# Resolve any merge conflicts, then push again 
+
+git add -A
+git commit -m "Add user authentication feature"
+git push 
+
+# Create and switch to a new branch
+git checkout -b feature/new-feature
+
+# After making changes...
+git push -u origin feature/new-feature 
