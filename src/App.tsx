@@ -62,9 +62,7 @@ function App({ flashcards = [], title = 'Flashcards' }: AppProps) {
   }
 
   // Protected routes
-  if (location.pathname === '/dashboard' || 
-      location.pathname.startsWith('/flashcards/') || 
-      location.pathname === '/profile') {
+  if (location.pathname.startsWith('/dashboard') || location.pathname === '/profile') {
     return (
       <Routes>
         <Route path="/dashboard" element={
@@ -72,12 +70,9 @@ function App({ flashcards = [], title = 'Flashcards' }: AppProps) {
             <Dashboard />
           </ProtectedRoute>
         } />
-        <Route path="/flashcards/:id" element={
+        <Route path="/dashboard/flashcards/:id" element={
           <ProtectedRoute>
-            <FlashcardDisplay 
-              flashcards={flashcards}
-              title={title}
-            />
+            <FlashcardDisplay />
           </ProtectedRoute>
         } />
         <Route path="/profile" element={

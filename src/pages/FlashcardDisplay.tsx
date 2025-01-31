@@ -43,12 +43,16 @@ export function FlashcardDisplay({ flashcards, title }: FlashcardDisplayProps) {
       if (!id) return;
 
       try {
-        const docRef = doc(db, 'flashcardSets', id);
+        console.log('Fetching flashcard set with ID:', id);
+        const docRef = doc(db, 'flashcardsets', id);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-          setFlashcardSet(docSnap.data() as FlashcardSet);
+          const data = docSnap.data() as FlashcardSet;
+          console.log('Found flashcard set:', data);
+          setFlashcardSet(data);
         } else {
+          console.log('No flashcard set found with ID:', id);
           setError('Flashcard set not found');
         }
       } catch (err) {
@@ -83,7 +87,7 @@ export function FlashcardDisplay({ flashcards, title }: FlashcardDisplayProps) {
 
     setIsSaving(true);
     try {
-      const docRef = doc(db, 'flashcardSets', id);
+      const docRef = doc(db, 'flashcardsets', id);
       await updateDoc(docRef, {
         flashcards: flashcardsWithIds
       });

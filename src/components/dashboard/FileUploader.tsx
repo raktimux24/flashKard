@@ -27,8 +27,11 @@ export function FileUploader() {
   const navigate = useNavigate();
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pdfJsLoaded, setPdfJsLoaded] = useState(false);
+  const [generatedCards, setGeneratedCards] = useState<Flashcard[] | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
   const user = useAuthStore(state => state.user);
 
   useEffect(() => {
@@ -187,6 +190,7 @@ export function FileUploader() {
     
     setIsGenerating(true);
     setError(null);
+    setGeneratedCards(null);
 
     try {
       const processedFiles = await Promise.all(
@@ -206,23 +210,14 @@ export function FileUploader() {
         throw new Error('No content found in the uploaded files');
       }
 
-      const generatedCards = await generateFlashcardsFromText(combinedContent);
+      const cards = await generateFlashcardsFromText(combinedContent);
 
-      if (!generatedCards || generatedCards.length === 0) {
+      if (!cards || cards.length === 0) {
         setError('No valid flashcards could be generated from the text. Please try again with different content.');
         return;
       }
 
-      const docRef = await addDoc(collection(db, 'flashcardSets'), {
-        title: files[0].file.name.split('.')[0],
-        flashcards: generatedCards,
-        numberOfCards: generatedCards.length,
-        userId: user.uid,
-        createdAt: serverTimestamp(),
-        sourceFiles: files.map(f => f.file.name),
-      });
-
-      navigate(`/flashcards/${docRef.id}`);
+      setGeneratedCards(cards);
     } catch (error: any) {
       console.error('Error generating flashcards:', error);
       setError(
@@ -232,6 +227,40 @@ export function FileUploader() {
       );
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleSaveFlashcards = async () => {
+    if (!user || !generatedCards) return;
+    
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      console.log('Saving flashcards to Firestore...');
+      console.log('User ID:', user.uid);
+      console.log('Generated cards:', generatedCards);
+      
+      const docRef = await addDoc(collection(db, 'flashcardsets'), {
+        title: files[0].file.name.split('.')[0],
+        flashcards: generatedCards,
+        numberOfCards: generatedCards.length,
+        userId: user.uid,
+        createdAt: serverTimestamp(),
+        sourceFiles: files.map(f => f.file.name),
+      });
+
+      console.log('Successfully saved flashcards with ID:', docRef.id);
+      navigate(`/dashboard/flashcards/${docRef.id}`);
+    } catch (error: any) {
+      console.error('Error saving flashcards:', error);
+      setError(
+        error instanceof Error 
+          ? error.message 
+          : 'Failed to save flashcards. Please try again.'
+      );
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -324,7 +353,7 @@ export function FileUploader() {
         )}
 
         {files.length > 0 && (
-          <div className="mt-6 flex justify-end">
+          <div className="mt-6 flex justify-end gap-4">
             <Button 
               className="gap-2"
               onClick={handleGenerateFlashcards}
@@ -342,6 +371,69 @@ export function FileUploader() {
                 </>
               )}
             </Button>
+
+            {generatedCards && (
+              <Button 
+                className="gap-2"
+                onClick={handleSaveFlashcards}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Save Flashcards
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        )}
+
+        {generatedCards && (
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-[#EAEAEA]">Generated Flashcards</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-[#00A6B2] hover:text-[#00A6B2]/80"
+              >
+                {isExpanded ? 'Show Less' : 'Show All'}
+              </Button>
+            </div>
+            <div className="space-y-4">
+              {generatedCards
+                .slice(0, isExpanded ? undefined : 3)
+                .map((card, index) => (
+                  <div 
+                    key={index} 
+                    className="p-4 bg-[#1A1A1A] rounded-lg transition-all duration-300 hover:bg-[#1A1A1A]/80"
+                  >
+                    <p className="text-sm font-medium text-[#EAEAEA] mb-2">
+                      Q: {card.question}
+                    </p>
+                    <p className="text-sm text-[#C0C0C0]">
+                      A: {card.answer}
+                    </p>
+                  </div>
+              ))}
+              {!isExpanded && generatedCards.length > 3 && (
+                <button
+                  onClick={() => setIsExpanded(true)}
+                  className="w-full p-4 bg-[#1A1A1A]/50 rounded-lg text-center hover:bg-[#1A1A1A] transition-colors duration-300"
+                >
+                  <p className="text-sm text-[#00A6B2]">
+                    +{generatedCards.length - 3} more flashcards
+                  </p>
+                </button>
+              )}
+            </div>
           </div>
         )}
 

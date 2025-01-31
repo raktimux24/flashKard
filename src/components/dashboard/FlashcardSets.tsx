@@ -4,9 +4,11 @@ import { Button } from '../ui/button';
 import { Eye, Edit2, Trash2, FileDown, CheckSquare, Square } from 'lucide-react';
 import { PatternCard, PatternCardBody } from '../ui/card-with-ellipsis-pattern';
 import { cn } from '../../lib/utils';
-import { addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, getDoc } from 'firebase/firestore';
-import { db } from '../../firebase/firebaseConfig';
+import { addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, where, getDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { Timestamp } from 'firebase/firestore';
+import { useAuthStore } from '../../store/authStore';
+import { Loader2, File } from 'lucide-react';
 
 interface FlashcardSet {
   id: string;
@@ -24,28 +26,82 @@ export function FlashcardSets() {
   const navigate = useNavigate();
   const [selectedSets, setSelectedSets] = useState<Set<string>>(new Set());
   const [flashcardSets, setFlashcardSets] = useState<FlashcardSet[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const user = useAuthStore(state => state.user);
 
   useEffect(() => {
-    const q = query(collection(db, 'flashcardsets'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const sets = querySnapshot.docs.map(doc => {
-        // Add debug logging for received data
-        console.log('Firestore document:', {
-          id: doc.id,
-          data: doc.data(),
-          cardsCount: doc.data().flashcards?.length || 0,
-          storedCount: doc.data().numberOfCards || 0
-        });
+    console.log('FlashcardSets component state:', {
+      flashcardSets,
+      isLoading,
+      error,
+      selectedSets: Array.from(selectedSets),
+      user: user?.uid
+    });
+  }, [flashcardSets, isLoading, error, selectedSets, user]);
+
+  // Debug function to check Firestore data
+  const checkFirestoreData = async () => {
+    if (!user) return;
+    
+    try {
+      console.log('Checking Firestore data directly...');
+      const querySnapshot = await getDocs(collection(db, 'flashcardsets'));
+      console.log('All documents in collection:', querySnapshot.size);
+      querySnapshot.forEach(doc => {
+        console.log('Document:', doc.id, doc.data());
+      });
+    } catch (err) {
+      console.error('Error checking Firestore:', err);
+    }
+  };
+
+  useEffect(() => {
+    checkFirestoreData();
+    if (!user) {
+      console.log('No user found, clearing flashcard sets');
+      setFlashcardSets([]);
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('Current user:', user.uid);
+
+    // Using query that matches our composite index
+    const q = query(
+      collection(db, 'flashcardsets'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc'),
+      orderBy('__name__', 'desc')
+    );
+
+    console.log('Query created:', q);
+    setIsLoading(true);
+    setError(null);
+
+    const unsubscribe = onSnapshot(q,
+      (querySnapshot) => {
+        console.log('Snapshot received, number of docs:', querySnapshot.size);
+        console.log('Docs:', querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         
-        return {
+        const sets = querySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
-        } as FlashcardSet;
-      });
-      setFlashcardSets(sets);
-    });
+        } as FlashcardSet));
+        
+        console.log('Processed sets:', sets);
+        setFlashcardSets(sets);
+        setIsLoading(false);
+      },
+      (err) => {
+        console.error('Error fetching flashcard sets:', err);
+        setError('Failed to load flashcard sets. Please try again later.');
+        setIsLoading(false);
+      }
+    );
+
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   const toggleSet = (id: string) => {
     const newSelected = new Set(selectedSets);
@@ -72,7 +128,24 @@ export function FlashcardSets() {
 
   const handleView = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    navigate(`/flashcards/${id}`);
+    navigate(`/dashboard/flashcards/${id}`);
+  };
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this flashcard set?')) return;
+
+    try {
+      await deleteDoc(doc(db, 'flashcardsets', id));
+      setSelectedSets(prev => {
+        const newSelected = new Set(prev);
+        newSelected.delete(id);
+        return newSelected;
+      });
+    } catch (err) {
+      console.error('Error deleting flashcard set:', err);
+      alert('Failed to delete flashcard set. Please try again.');
+    }
   };
 
   const formatDate = (timestamp: Timestamp) => {
@@ -80,244 +153,137 @@ export function FlashcardSets() {
     return new Date(timestamp.toDate()).toLocaleDateString();
   };
 
-  const handleSaveFlashcardSet = async (setData: Partial<FlashcardSet>) => {
-    try {
-      // Validate input structure
-      if (!setData || typeof setData !== 'object') {
-        throw new Error('Invalid set data structure');
-      }
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin text-[#00A6B2]" />
+          <p className="text-[#EAEAEA]">Loading flashcard sets...</p>
+        </div>
+      </div>
+    );
+  }
 
-      // Process flashcards array with proper JSON parsing
-      const rawFlashcards = Array.isArray(setData.flashcards) ? setData.flashcards : [];
+  if (error) {
+    return (
+      <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+        <p className="text-sm text-red-500">{error}</p>
+      </div>
+    );
+  }
 
-      // Function to clean and parse JSON string
-      const parseJsonSafely = (jsonString: string) => {
-        try {
-          // First, try to parse the entire array if it looks like one
-          if (typeof jsonString === 'string' && jsonString.trim().startsWith('[') && jsonString.trim().endsWith(']')) {
-            // Clean the array string
-            const cleanedArrayString = jsonString
-              .replace(/\\"/g, '"') // Replace escaped quotes
-              .replace(/\\/g, '') // Remove other escapes
-              .replace(/\n/g, '') // Remove newlines
-              .replace(/\r/g, '') // Remove carriage returns
-              .trim();
-
-            // Parse the cleaned array
-            const parsedArray = JSON.parse(cleanedArrayString);
-            if (Array.isArray(parsedArray)) {
-              return parsedArray.map(item => ({
-                question: String(item?.question || '').trim(),
-                answer: String(item?.answer || '').trim()
-              }));
-            }
-          }
-
-          // If not an array or array parsing failed, try as single object
-          const cleaned = jsonString
-            .replace(/\\"/g, '"')
-            .replace(/\\/g, '')
-            .replace(/^"|"$/g, '')
-            .replace(/\\n/g, ' ')
-            .trim();
-
-          const parsed = JSON.parse(cleaned);
-          return parsed;
-        } catch (err) {
-          console.warn('Failed to parse JSON:', err);
-          return null;
-        }
-      };
-
-      const validFlashcards = rawFlashcards
-        .map(card => {
-          try {
-            if (typeof card === 'string') {
-              const parsed = parseJsonSafely(card);
-              if (Array.isArray(parsed)) {
-                return parsed;
-              }
-              if (parsed?.question && parsed?.answer) {
-                return {
-                  question: String(parsed.question).trim(),
-                  answer: String(parsed.answer).trim()
-                };
-              }
-            } else if (typeof card === 'object' && card !== null) {
-              return {
-                question: String(card.question || '').trim(),
-                answer: String(card.answer || '').trim()
-              };
-            }
-            return null;
-          } catch (err) {
-            console.warn('Failed to process flashcard:', err, 'Card data:', card);
-            return null;
-          }
-        })
-        .filter((card): card is { question: string; answer: string } | Array<{ question: string; answer: string }> => 
-          card !== null
-        )
-        .flat()
-        .filter((card): card is { question: string; answer: string } =>
-          typeof card === 'object' &&
-          card !== null &&
-          typeof card.question === 'string' &&
-          typeof card.answer === 'string' &&
-          card.question.length > 0 &&
-          card.answer.length > 0
-        );
-
-      if (validFlashcards.length === 0) {
-        throw new Error('No valid flashcards could be parsed from the input');
-      }
-
-      console.log('Validated flashcards:', validFlashcards);
-      console.log('Calculated count:', validFlashcards.length);
-
-      // Force include numberOfCards with explicit type
-      const docData = {
-        title: String(setData.title || 'Untitled Set').substring(0, 100),
-        description: String(setData.description || '').substring(0, 500),
-        flashcards: validFlashcards,
-        numberOfCards: validFlashcards.length,
-        userId: "currentUserId",
-        sourceFiles: Array.isArray(setData.sourceFiles) ? setData.sourceFiles : [],
-        createdAt: serverTimestamp(),
-        lastModified: serverTimestamp()
-      };
-
-      // Sanitize the data before saving
-      const sanitizedData = JSON.parse(JSON.stringify(docData));
-      
-      // Debug output
-      console.log('Final document data:', sanitizedData);
-      
-      const docRef = await addDoc(collection(db, 'flashcardsets'), sanitizedData);
-      console.log('Saved document:', await getDoc(docRef));
-      
-      return docRef.id;
-    } catch (error) {
-      console.error('Save error:', error);
-      throw new Error(`Failed to save flashcard set: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
+  if (!user) {
+    return (
+      <div className="p-4 bg-[#2A2A2A]/80 border border-[#404040] rounded-lg">
+        <p className="text-[#EAEAEA]">Please sign in to view your flashcard sets.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-semibold text-[#EAEAEA]">Your Flashcard Sets</h2>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            className="gap-2"
-            onClick={toggleAll}
-          >
-            {selectedSets.size === flashcardSets.length ? (
-              <CheckSquare className="h-4 w-4 text-[#00A6B2]" />
-            ) : (
-              <Square className="h-4 w-4" />
-            )}
-            Select All
-          </Button>
-          <Button 
-            variant="outline" 
-            className="gap-2"
-            onClick={handleExportSelected}
-            disabled={selectedSets.size === 0}
-          >
-            <FileDown className="h-4 w-4" />
-            Export Selected
-          </Button>
+          {flashcardSets.length > 0 && (
+            <>
+              <Button 
+                variant="outline" 
+                className="gap-2"
+                onClick={toggleAll}
+              >
+                {selectedSets.size === flashcardSets.length ? (
+                  <CheckSquare className="h-4 w-4 text-[#00A6B2]" />
+                ) : (
+                  <Square className="h-4 w-4" />
+                )}
+                Select All
+              </Button>
+              <Button 
+                variant="outline" 
+                className="gap-2"
+                onClick={handleExportSelected}
+                disabled={selectedSets.size === 0}
+              >
+                <FileDown className="h-4 w-4" />
+                Export Selected
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {flashcardSets.map((set) => {
-          const isSelected = selectedSets.has(set.id);
-          return (
-            <PatternCard 
-              key={set.id} 
-              className={cn(
-                "bg-[#2A2A2A]/80 border-[#404040] transition-colors duration-300 backdrop-blur-sm cursor-pointer",
-                isSelected ? "border-[#00A6B2]" : "hover:border-[#00A6B2]/50"
-              )}
-              gradientClassName="from-[#2A2A2A]/90 via-[#2A2A2A]/40 to-[#2A2A2A]/10"
-              onClick={() => toggleSet(set.id)}
-            >
-              <PatternCardBody>
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between">
-                    <h3 className="text-lg font-semibold text-[#EAEAEA]">{set.title}</h3>
-                    {isSelected ? (
-                      <CheckSquare className="h-5 w-5 text-[#00A6B2]" />
-                    ) : (
-                      <Square className="h-5 w-5 text-[#C0C0C0]" />
-                    )}
+      {flashcardSets.length === 0 ? (
+        <div className="p-8 bg-[#2A2A2A]/80 border border-[#404040] rounded-lg text-center">
+          <div className="rounded-full bg-[#00A6B2]/10 p-4 w-fit mx-auto mb-4">
+            <File className="h-8 w-8 text-[#00A6B2]" />
+          </div>
+          <h3 className="text-lg font-medium text-[#EAEAEA] mb-2">No Flashcard Sets Yet</h3>
+          <p className="text-[#C0C0C0] mb-6">Upload files to generate your first flashcard set!</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {flashcardSets.map((set) => {
+            const isSelected = selectedSets.has(set.id);
+            return (
+              <PatternCard 
+                key={set.id} 
+                className={cn(
+                  "bg-[#2A2A2A]/80 border-[#404040] transition-colors duration-300 backdrop-blur-sm cursor-pointer",
+                  isSelected ? "border-[#00A6B2]" : "hover:border-[#00A6B2]/50"
+                )}
+                gradientClassName="from-[#2A2A2A]/90 via-[#2A2A2A]/40 to-[#2A2A2A]/10"
+                onClick={() => toggleSet(set.id)}
+              >
+                <PatternCardBody>
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold text-[#EAEAEA] mb-1">{set.title}</h3>
+                        {set.description && (
+                          <p className="text-sm text-[#C0C0C0] line-clamp-2">{set.description}</p>
+                        )}
+                      </div>
+                      {isSelected ? (
+                        <CheckSquare className="h-5 w-5 text-[#00A6B2]" />
+                      ) : (
+                        <Square className="h-5 w-5 text-[#C0C0C0]" />
+                      )}
+                    </div>
+                    <div className="space-y-2 text-sm text-[#C0C0C0]">
+                      <p>{set.numberOfCards} Cards</p>
+                      <p>Created: {formatDate(set.createdAt)}</p>
+                      {set.sourceFiles && set.sourceFiles.length > 0 && (
+                        <p className="truncate">Source: {set.sourceFiles.join(', ')}</p>
+                      )}
+                    </div>
+                    <div className="flex justify-between pt-4">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="gap-1 hover:text-[#00A6B2]"
+                        onClick={(e) => handleView(e, set.id)}
+                      >
+                        <Eye className="h-4 w-4" />
+                        View
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="gap-1 text-destructive hover:text-destructive"
+                        onClick={(e) => handleDelete(e, set.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-2 text-sm text-[#C0C0C0]">
-                    <p>{set.numberOfCards} Cards</p>
-                    <p>Created: {formatDate(set.createdAt)}</p>
-                  </div>
-                  <div className="flex justify-between pt-4">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="gap-1 hover:text-[#00A6B2]"
-                      onClick={(e) => handleView(e, set.id)}
-                    >
-                      <Eye className="h-4 w-4" />
-                      View
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="gap-1 hover:text-[#00A6B2]"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSaveFlashcardSet(set);
-                      }}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                      Save
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="gap-1 text-destructive hover:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Handle delete logic
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              </PatternCardBody>
-            </PatternCard>
-          );
-        })}
-      </div>
-
-      {/* Pagination */}
-      <div className="flex justify-center mt-8">
-        <nav className="flex gap-2">
-          <Button variant="outline" disabled>Previous</Button>
-          <Button variant="outline">1</Button>
-          <Button variant="outline">2</Button>
-          <Button variant="outline">3</Button>
-          <Button variant="outline">Next</Button>
-        </nav>
-      </div>
-
-      <Button 
-        variant="outline"
-        onClick={() => handleSaveFlashcardSet(flashcardSets[0])}
-      >
-        Test Save
-      </Button>
+                </PatternCardBody>
+              </PatternCard>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
