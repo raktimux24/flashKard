@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, updateProfile } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -142,5 +142,31 @@ export const signInWithGoogle = async () => {
     return { user: result.user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message };
+  }
+};
+
+export const reauthenticateUser = async (user: User, currentPassword: string) => {
+  try {
+    const credential = EmailAuthProvider.credential(user.email!, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    return { error: null };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+};
+
+export const changePassword = async (user: User, currentPassword: string, newPassword: string) => {
+  try {
+    // First reauthenticate
+    const { error: reauthError } = await reauthenticateUser(user, currentPassword);
+    if (reauthError) {
+      return { error: reauthError };
+    }
+
+    // Then update password
+    await updatePassword(user, newPassword);
+    return { error: null };
+  } catch (error: any) {
+    return { error: error.message };
   }
 };

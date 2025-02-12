@@ -1,16 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { Edit2, Share2, Trash2, Save } from 'lucide-react';
+import { Edit2, Trash2 } from 'lucide-react';
 import { DashboardLayout } from '../components/dashboard/DashboardLayout';
 import { CardCarousel } from '../components/flashcards/CardCarousel';
 import { ProgressIndicator } from '../components/flashcards/ProgressIndicator';
 import { ExportMenu } from '../components/flashcards/ExportMenu';
 import { Button } from '../components/ui/button';
 import { PatternCard, PatternCardBody } from '../components/ui/card-with-ellipsis-pattern';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 import { db } from '../lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
 import { useStatistics } from '../hooks/useStatistics';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface Flashcard {
   question: string;
@@ -37,7 +47,8 @@ export function FlashcardDisplay({ flashcards, title }: FlashcardDisplayProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [flashcardSet, setFlashcardSet] = useState<FlashcardSet | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { incrementStatistic, addStudyTime } = useStatistics();
 
@@ -98,24 +109,93 @@ export function FlashcardDisplay({ flashcards, title }: FlashcardDisplayProps) {
     }
   };
 
-  const handleExport = (format: 'pdf' | 'csv' | 'anki') => {
-    console.log(`Exporting as ${format}`);
+  const handleExport = async (format: 'pdf') => {
+    if (format === 'pdf' && flashcardSet) {
+      try {
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        let yOffset = 20;
+
+        // Add title
+        pdf.setFontSize(20);
+        pdf.text(flashcardSet.title, 20, yOffset);
+        yOffset += 20;
+
+        // Add each flashcard
+        pdf.setFontSize(12);
+        for (let i = 0; i < flashcardSet.flashcards.length; i++) {
+          const card = flashcardSet.flashcards[i];
+          
+          // Add card number
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`Card ${i + 1}`, 20, yOffset);
+          yOffset += 10;
+
+          // Add question
+          pdf.setFont('helvetica', 'bold');
+          pdf.text('Question:', 20, yOffset);
+          yOffset += 7;
+          pdf.setFont('helvetica', 'normal');
+          const questionLines = pdf.splitTextToSize(card.question, 170);
+          pdf.text(questionLines, 20, yOffset);
+          yOffset += (questionLines.length * 7);
+
+          // Add answer
+          pdf.setFont('helvetica', 'bold');
+          pdf.text('Answer:', 20, yOffset);
+          yOffset += 7;
+          pdf.setFont('helvetica', 'normal');
+          const answerLines = pdf.splitTextToSize(card.answer, 170);
+          pdf.text(answerLines, 20, yOffset);
+          yOffset += (answerLines.length * 7) + 10;
+
+          // Add a line separator
+          pdf.line(20, yOffset, 190, yOffset);
+          yOffset += 15;
+
+          // Check if we need a new page
+          if (yOffset > 250) {
+            pdf.addPage();
+            yOffset = 20;
+          }
+        }
+
+        // Save the PDF
+        pdf.save(`${flashcardSet.title.replace(/\s+/g, '_')}_flashcards.pdf`);
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+      }
+    }
   };
 
-  const handleSave = async () => {
-    if (!id || !flashcardSet) return;
+  const handleDeleteCard = async () => {
+    if (!flashcardSet || !id) return;
 
-    setIsSaving(true);
+    setIsDeleting(true);
     try {
+      const updatedFlashcards = [...flashcardSet.flashcards];
+      updatedFlashcards.splice(currentIndex, 1);
+
       const docRef = doc(db, 'flashcardsets', id);
       await updateDoc(docRef, {
-        flashcards: flashcardsWithIds
+        flashcards: updatedFlashcards
       });
+
+      setFlashcardSet({
+        ...flashcardSet,
+        flashcards: updatedFlashcards
+      });
+
+      // Adjust current index if necessary
+      if (currentIndex >= updatedFlashcards.length) {
+        setCurrentIndex(Math.max(0, updatedFlashcards.length - 1));
+      }
+
+      setIsDeleteDialogOpen(false);
     } catch (err) {
-      console.error('Error saving flashcards:', err);
-      setError('Failed to save flashcards');
+      console.error('Error deleting flashcard:', err);
+      setError('Failed to delete flashcard');
     } finally {
-      setIsSaving(false);
+      setIsDeleting(false);
     }
   };
 
@@ -185,25 +265,13 @@ export function FlashcardDisplay({ flashcards, title }: FlashcardDisplayProps) {
                 </div>
               )}
 
-              <div className="flex justify-center gap-4">
+              <div className="flex justify-center">
                 <Button 
                   variant="outline" 
-                  className="gap-2"
-                  onClick={handleSave}
-                  disabled={isSaving}
+                  className="gap-2 text-destructive hover:text-destructive"
+                  onClick={() => setIsDeleteDialogOpen(true)}
+                  disabled={flashcardsWithIds.length === 0}
                 >
-                  {isSaving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4" />
-                  )}
-                  {isSaving ? 'Saving...' : 'Save'}
-                </Button>
-                <Button variant="outline" className="gap-2">
-                  <Share2 className="h-4 w-4" />
-                  Share
-                </Button>
-                <Button variant="outline" className="gap-2 text-destructive hover:text-destructive">
                   <Trash2 className="h-4 w-4" />
                   Delete
                 </Button>
@@ -212,6 +280,35 @@ export function FlashcardDisplay({ flashcards, title }: FlashcardDisplayProps) {
           </PatternCardBody>
         </PatternCard>
       </div>
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="bg-[#2A2A2A] border-[#404040] text-[#EAEAEA] sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#EAEAEA]">Delete Flashcard</DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Are you sure you want to delete this flashcard? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              className="text-[#EAEAEA] hover:text-[#EAEAEA] hover:bg-[#404040]"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteCard}
+              disabled={isDeleting}
+              className="gap-2"
+            >
+              {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

@@ -16,6 +16,8 @@ import { ForgotPasswordPage } from './components/auth/ForgotPasswordPage';
 import { Dashboard } from './pages/Dashboard';
 import { FlashcardDisplay } from './pages/FlashcardDisplay';
 import { Profile } from './pages/Profile';
+import { AuthProvider } from './context/AuthContext';
+import { Toaster } from './components/ui/toaster';
 
 // Add interface for props
 interface AppProps {
@@ -39,7 +41,7 @@ const AnimatedGrid = () => (
   </motion.div>
 );
 
-function App({ flashcards = [], title = 'Flashcards' }: AppProps) {
+function AppContent({ flashcards = [], title = 'Flashcards' }: AppProps) {
   const location = useLocation();
   const { user, isLoading, initialize } = useAuthStore();
 
@@ -62,51 +64,62 @@ function App({ flashcards = [], title = 'Flashcards' }: AppProps) {
   }
 
   return (
-    <Routes>
-      {/* Public Routes */}
-      <Route path="/" element={
-        <div className="min-h-screen bg-[#121212] text-[#EAEAEA] relative overflow-hidden">
-          <AnimatedGrid />
-          <div className="relative z-10">
-            <Navbar />
-            <Hero />
-            <Features />
-            <Pricing />
-            <Testimonials />
-            <Footer />
+    <>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={
+          <div className="min-h-screen bg-[#121212] text-[#EAEAEA] relative overflow-hidden">
+            <AnimatedGrid />
+            <div className="relative z-10">
+              <Navbar />
+              <Hero />
+              <Features />
+              <Pricing />
+              <Testimonials />
+              <Footer />
+            </div>
+            <div className="fixed inset-0 pointer-events-none [mask-image:radial-gradient(90%_60%_at_50%_50%,#000_40%,transparent)]">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#0F766E/30%,transparent_70%)] blur-[120px]" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#2DD4BF/15%,transparent)] blur-[80px]" />
+            </div>
           </div>
-          <div className="fixed inset-0 pointer-events-none [mask-image:radial-gradient(90%_60%_at_50%_50%,#000_40%,transparent)]">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#0F766E/30%,transparent_70%)] blur-[120px]" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#2DD4BF/15%,transparent)] blur-[80px]" />
-          </div>
-        </div>
-      } />
+        } />
 
-      {/* Auth Routes */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignupPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        {/* Auth Routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
-      {/* Protected Routes */}
-      <Route path="/dashboard" element={
-        <ProtectedRoute>
-          <Dashboard />
-        </ProtectedRoute>
-      } />
-      <Route path="/dashboard/flashcards/:id" element={
-        <ProtectedRoute>
-          <FlashcardDisplay flashcards={flashcards} title={title} />
-        </ProtectedRoute>
-      } />
-      <Route path="/profile" element={
-        <ProtectedRoute>
-          <Profile />
-        </ProtectedRoute>
-      } />
+        {/* Protected Routes */}
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/flashcards/:id" element={
+          <ProtectedRoute>
+            <FlashcardDisplay flashcards={flashcards} title={title} />
+          </ProtectedRoute>
+        } />
+        <Route path="/profile" element={
+          <ProtectedRoute>
+            <Profile />
+          </ProtectedRoute>
+        } />
 
-      {/* Catch all route */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Catch all route */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <Toaster />
+    </>
+  );
+}
+
+function App(props: AppProps) {
+  return (
+    <AuthProvider>
+      <AppContent {...props} />
+    </AuthProvider>
   );
 }
 

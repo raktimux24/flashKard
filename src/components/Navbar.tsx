@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Brain, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export function Navbar() {
@@ -24,7 +24,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
             <Link to="/" className="flex items-center">
-              <Brain className="h-8 w-8 text-[#00A6B2]" />
+              <img src="/FlashCardAI Logo.svg" alt="Flash Karao Logo" className="h-8 w-8" />
               <span className="ml-2 text-xl font-bold">Flash Karao</span>
             </Link>
           </div>

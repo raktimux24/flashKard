@@ -1,9 +1,9 @@
 import React from 'react';
-import { FileDown, FileText, Database } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { Button } from '../ui/button';
 
 interface ExportMenuProps {
-  onExport: (format: 'pdf' | 'csv' | 'anki') => void;
+  onExport: (format: 'pdf') => void;
 }
 
 export function ExportMenu({ onExport }: ExportMenuProps) {
@@ -16,22 +16,6 @@ export function ExportMenu({ onExport }: ExportMenuProps) {
       >
         <FileText className="h-4 w-4" />
         Export PDF
-      </Button>
-      <Button 
-        variant="outline" 
-        className="gap-2"
-        onClick={() => onExport('csv')}
-      >
-        <FileDown className="h-4 w-4" />
-        Export CSV
-      </Button>
-      <Button 
-        variant="outline" 
-        className="gap-2"
-        onClick={() => onExport('anki')}
-      >
-        <Database className="h-4 w-4" />
-        Export to Anki
       </Button>
     </div>
   );

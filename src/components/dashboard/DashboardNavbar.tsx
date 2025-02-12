@@ -1,5 +1,5 @@
 import React from 'react';
-import { Brain, Menu, X, LogOut } from 'lucide-react';
+import { Menu, X, LogOut } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
@@ -37,8 +37,8 @@ export function DashboardNavbar() {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
             <Link to="/" className="flex items-center">
-              <Brain className="h-8 w-8 text-[#00A6B2]" />
-              <span className="ml-2 text-xl font-bold">FlashAI</span>
+              <img src="/FlashCardAI Logo.svg" alt="Flash Karao Logo" className="h-8 w-8" />
+              <span className="ml-2 text-xl font-bold">Flash Karao</span>
             </Link>
           </div>
           

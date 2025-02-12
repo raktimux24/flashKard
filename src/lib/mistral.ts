@@ -11,8 +11,29 @@ interface MistralResponse {
 const API_BASE_URL = 'https://api.mistral.ai/v1';
 const API_ENDPOINT = `${API_BASE_URL}/chat/completions`;
 
-const SYSTEM_PROMPT = `You are a flashcard generator. Create flashcards from the given text. Your response must be ONLY a valid JSON array of objects. Each object must have 'question' and 'answer' fields. Maximum 400 characters per field. Example format:
-[{"question":"What is X?","answer":"X is Y"}]`;
+const SYSTEM_PROMPT = `You are an expert flashcard generator focused on creating high-quality learning materials. Follow these rules strictly:
+
+1. Create concise, clear flashcards from the given text
+2. Each flashcard should test ONE specific concept or fact
+3. Questions should:
+   - Be specific and unambiguous
+   - Encourage active recall
+   - Avoid yes/no format
+   - Begin with words like "What", "How", "Why", "Explain", "Compare"
+4. Answers should be:
+   - Complete but concise
+   - Self-contained (understandable without the question)
+   - Include key context when needed
+
+Your response must be ONLY a valid JSON array of objects. Each object must have 'question' and 'answer' fields. Maximum 400 characters per field.
+
+Example format:
+[
+  {
+    "question": "What is the primary function of photosynthesis?",
+    "answer": "Photosynthesis converts light energy into chemical energy (glucose), using carbon dioxide and water, while releasing oxygen as a byproduct"
+  }
+]`;
 
 function isValidResponseFormat(data: MistralResponse) {
   return data && typeof data === 'object' && 'choices' in data && Array.isArray(data.choices) && data.choices.length > 0 &&
