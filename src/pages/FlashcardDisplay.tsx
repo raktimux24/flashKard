@@ -14,11 +14,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../components/ui/dialog";
-import { db } from '../lib/firebase';
+} from "@/components/ui/dialog";
+import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
-import { useStatistics } from '../hooks/useStatistics';
+import { useStatistics } from '@/hooks/useStatistics';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
