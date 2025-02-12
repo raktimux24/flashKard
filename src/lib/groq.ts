@@ -104,62 +104,79 @@ async function callGroqAPI(chunk: string): Promise<Response> {
   return response;
 }
 
+// Add this helper function to chunk the text
+function chunkText(text: string, maxLength: number): string[] {
+  const chunks: string[] = [];
+  let currentChunk = '';
+  
+  // Split by sentences to avoid cutting in the middle of one
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  
+  for (const sentence of sentences) {
+    if ((currentChunk + sentence).length <= maxLength) {
+      currentChunk += sentence;
+    } else {
+      if (currentChunk) chunks.push(currentChunk.trim());
+      currentChunk = sentence;
+    }
+  }
+  
+  if (currentChunk) chunks.push(currentChunk.trim());
+  return chunks;
+}
+
 export async function generateFlashcardsFromText(text: string): Promise<Flashcard[]> {
   const cleanedText = text
     .replace(/\s+/g, ' ') // Reduce whitespace
     .substring(0, 50000); // Hard limit for safety
 
+  // Split text into smaller chunks
+  const chunks = chunkText(cleanedText, MAX_CHUNK_LENGTH);
+  let allFlashcards: Flashcard[] = [];
+
   try {
-    const response = await fetch(`${API_BASE_URL}/flashcards/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ text: cleanedText }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to generate flashcards');
-    }
-
-    const data = await response.json();
-    console.log('Full API response:', JSON.stringify(data, null, 2));
-    
-    if (!data.choices?.[0]?.message?.content) {
-      console.error('Invalid API response format:', JSON.stringify(data, null, 2));
-      throw new Error('Invalid response format from API');
-    }
-
-    const content = data.choices[0].message.content.trim();
-    console.log('Raw API response content:', content);
-    
-    try {
-      // Try to parse as JSON first
-      const parsedContent = JSON.parse(content);
-      if (Array.isArray(parsedContent)) {
-        return parsedContent.map(card => ({
-          question: card.question || card.front || '',
-          answer: card.answer || card.back || ''
-        }));
+    // Process each chunk
+    for (const chunk of chunks) {
+      const response = await withRetry(() => callGroqAPI(chunk));
+      const data = await response.json();
+      
+      if (!data.choices?.[0]?.message?.content) {
+        console.error('Invalid API response format:', JSON.stringify(data, null, 2));
+        continue; // Skip this chunk if invalid
       }
-    } catch (e) {
-      // If JSON parsing fails, try to parse the text format
-      const cards = content
-        .split(/\n\s*\n/)
-        .filter((block: string) => block.trim())
-        .map((block: string) => {
-          const [question, ...answerParts] = block.split(/\n/);
-          return {
-            question: question.replace(/^Q:|Question:|^\d+\.|^-/, '').trim(),
-            answer: answerParts.join('\n').replace(/^A:|Answer:|^\d+\.|^-/, '').trim()
-          };
-        });
-      return cards;
+
+      const content = data.choices[0].message.content.trim();
+      
+      try {
+        // Try to parse as JSON first
+        const parsedContent = JSON.parse(content);
+        if (Array.isArray(parsedContent)) {
+          const chunkCards = parsedContent.map(card => ({
+            question: card.question || card.front || '',
+            answer: card.answer || card.back || ''
+          }));
+          allFlashcards = [...allFlashcards, ...chunkCards];
+        }
+      } catch (e) {
+        // If JSON parsing fails, try to parse the text format
+        const cards = content
+          .split(/\n\s*\n/)
+          .filter((block: string) => block.trim())
+          .map((block: string) => {
+            const [question, ...answerParts] = block.split(/\n/);
+            return {
+              question: question.replace(/^Q:|Question:|^\d+\.|^-/, '').trim(),
+              answer: answerParts.join('\n').replace(/^A:|Answer:|^\d+\.|^-/, '').trim()
+            };
+          });
+        allFlashcards = [...allFlashcards, ...cards];
+      }
     }
+
+    return allFlashcards;
+    
   } catch (error) {
     console.error('Error generating flashcards:', error);
     throw error;
   }
-  
-  return [];
 }
