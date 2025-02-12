@@ -63,6 +63,8 @@ export async function callMistralAPI(chunk: string): Promise<any> {
   }
 }
 
+import { generateFlashcardsFromText as generateGroqFlashcards } from './groq';
+
 export async function generateFlashcardsFromText(text: string): Promise<Flashcard[]> {
   try {
     const response = await callMistralAPI(text);
@@ -88,7 +90,7 @@ export async function generateFlashcardsFromText(text: string): Promise<Flashcar
       // Fallback to Groq API
       try {
         const groqCards = await generateGroqFlashcards(text);
-        return groqCards.map(card => ({ ...card, source: 'Groq (fallback)' }));
+        return groqCards.map((card: Flashcard) => ({ ...card, source: 'Groq (fallback)' }));
       } catch (groqError) {
         console.error('Both Mistral and Groq APIs failed:', groqError);
         throw new Error('Failed to generate flashcards');
@@ -99,7 +101,7 @@ export async function generateFlashcardsFromText(text: string): Promise<Flashcar
     // Fallback to Groq API
     try {
       const groqCards = await generateGroqFlashcards(text);
-      return groqCards.map(card => ({ ...card, source: 'Groq (fallback)' }));
+      return groqCards.map((card: Flashcard) => ({ ...card, source: 'Groq (fallback)' }));
     } catch (groqError) {
       console.error('Both Mistral and Groq APIs failed:', groqError);
       throw new Error('Failed to generate flashcards');
