@@ -12,7 +12,7 @@ const API_BASE_URL = import.meta.env.DEV
   ? import.meta.env.VITE_API_URL
   : '/api';
 
-const API_ENDPOINT = `${API_BASE_URL}/api/groq/openai/v1/chat/completions`;
+const API_ENDPOINT = `${API_BASE_URL}/groq/openai/v1/chat/completions`;
 const SYSTEM_PROMPT = `You create concise flashcards. Follow these rules:
 1. Use ONLY valid JSON array format
 2. Each object has 'question' and 'answer'
