@@ -13,7 +13,8 @@ interface RateLimitState {
 
 const API_BASE_URL = 'https://api.groq.com/openai/v1';
 
-const API_ENDPOINT = `${API_BASE_URL}/chat/completions`;
+const API_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'; // Verify this endpoint
+
 const SYSTEM_PROMPT = `You create concise flashcards. Follow these rules:
 1. Use ONLY valid JSON array format
 2. Each object has 'question' and 'answer'
@@ -23,7 +24,7 @@ Example: [{"question":"What is X?","answer":"X is Y"}]`;
 
 const MAX_CHUNK_LENGTH = 15000; // ~15k characters
 
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 1;
 const BASE_DELAY = 2000; // 2 seconds
 const JITTER_FACTOR = 0.3;
 
@@ -58,17 +59,35 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
+      // Check if we're rate limited
+      if (rateLimit.remaining <= 0) {
+        const waitTime = (rateLimit.reset * 1000) - Date.now();
+        if (waitTime > 0) {
+          console.log(`Rate limited, waiting ${waitTime}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+      
       return await fn();
     } catch (error: any) {
       lastError = error;
       const rateLimitInfo = parseRateLimitError(error);
       
       if (rateLimitInfo) {
-        const waitTime = (rateLimitInfo.reset * 1000) - Date.now();
-        if (waitTime > 0) {
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-          continue;
+        rateLimit = rateLimitInfo;
+        if (rateLimitInfo.remaining <= 0) {
+          const waitTime = (rateLimitInfo.reset * 1000) - Date.now();
+          if (waitTime > 0) {
+            console.log(`Rate limited, waiting ${waitTime}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
         }
+      }
+      
+      // If it's a 429, immediately try Mistral
+      if (error?.response?.status === 429) {
+        throw error;
       }
       
       const delay = Math.min(BASE_DELAY * Math.pow(2, attempt - 1), 30000);
@@ -85,24 +104,30 @@ async function callGroqAPI(chunk: string): Promise<Response> {
     throw new Error('GROQ API key not found. Please set VITE_GROQ_API_KEY in your environment.');
   }
 
+  const payload = JSON.stringify({
+    model: 'llama-3.3-70b-chat',  // Using chat model for better JSON responses
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: `Create flashcards from this text. Respond ONLY with the JSON array, no markdown or other text:\n\n${chunk}` }
+    ],
+    temperature: 0.3,  // Lower temperature for more consistent output
+    max_tokens: 1000,
+    response_format: { type: "json_object" }  // Force JSON response
+  });
+
+  console.log('Calling Groq API with payload:', payload);
+
   const response = await fetch(API_ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',  // Updated to use the latest model
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `Create flashcards from this text:\n\n${chunk}` }
-      ],
-      temperature: 0.7,
-      max_tokens: 1000
-    })
+    body: payload
   });
 
   if (!response.ok) {
+    console.error('Groq API failed with status:', response.status);
     const error = new Error(`API request failed: ${response.status}`);
     (error as any).response = response;
     throw error;
@@ -134,62 +159,58 @@ function chunkText(text: string, maxLength: number): string[] {
 
 export async function generateFlashcardsFromText(text: string): Promise<Flashcard[]> {
   try {
-    // First try with Groq
-    const cleanedText = text
-      .replace(/\s+/g, ' ') // Reduce whitespace
-      .substring(0, 50000); // Hard limit for safety
-
-    // Split text into smaller chunks
-    const chunks = chunkText(cleanedText, MAX_CHUNK_LENGTH);
-    let allFlashcards: Flashcard[] = [];
+    const chunks = chunkText(text, MAX_CHUNK_LENGTH);
+    let allCards: Flashcard[] = [];
 
     for (const chunk of chunks) {
-      const response = await withRetry(() => callGroqAPI(chunk));
-      const data = await response.json();
-      const content = data.choices[0].message.content;
-      
       try {
-        // Try to parse as JSON first
-        const parsedContent = JSON.parse(content);
-        if (Array.isArray(parsedContent)) {
-          const chunkCards = parsedContent.map(card => ({
-            question: card.question || card.front || '',
-            answer: card.answer || card.back || '',
+        const response = await withRetry(() => callGroqAPI(chunk));
+        const data = await response.json();
+        const content = data.choices[0].message.content;
+        
+        try {
+          // Handle both direct JSON array and nested JSON object formats
+          const jsonContent = typeof content === 'string' ? JSON.parse(content) : content;
+          const cards = Array.isArray(jsonContent) ? jsonContent : jsonContent.flashcards || [];
+          
+          if (!Array.isArray(cards)) {
+            throw new Error('Response is not an array of flashcards');
+          }
+
+          allCards = [...allCards, ...cards.map((card: Flashcard) => ({
+            ...card,
+            question: card.question?.trim() || '',
+            answer: card.answer?.trim() || '',
             source: 'Groq'
-          }));
-          allFlashcards = [...allFlashcards, ...chunkCards];
+          }))];
+        } catch (e) {
+          console.error('Failed to parse Groq API response:', e);
+          console.error('Raw content:', content);
+          throw new Error('Invalid response format from Groq API');
         }
-      } catch (e) {
-        // If JSON parsing fails, try to parse the text format
-        const cards = content
-          .split(/\n\s*\n/)
-          .filter((block: string) => block.trim())
-          .map((block: string) => {
-            const [question, ...answerParts] = block.split(/\n/);
-            return {
-              question: question.replace(/^Q:|Question:|^\d+\.|^-/, '').trim(),
-              answer: answerParts.join('\n').replace(/^A:|Answer:|^\d+\.|^-/, '').trim(),
-              source: 'Groq'
-            };
-          });
-        allFlashcards = [...allFlashcards, ...cards];
+      } catch (error) {
+        console.error('Groq API failed:', error);
+        // Fall back to Mistral for this chunk
+        try {
+          const mistralCards = await generateMistralFlashcards(chunk);
+          allCards = [...allCards, ...mistralCards];
+        } catch (mistralError) {
+          console.error('Mistral API failed:', mistralError);
+          // Handle the error gracefully, possibly return a fallback response
+          throw new Error('Both Groq and Mistral APIs failed');
+        }
       }
     }
-
-    return allFlashcards;
-  } catch (error) {
-    console.error('Error with Groq API, falling back to Mistral:', error);
     
-    // Fallback to Mistral
+    return allCards;
+  } catch (error) {
+    console.error('Error in Groq flashcard generation:', error);
     try {
-      const mistralCards = await generateMistralFlashcards(text);
-      return mistralCards.map((card: Flashcard) => ({
-        ...card,
-        source: 'Mistral'
-      }));
+      return generateMistralFlashcards(text);
     } catch (mistralError) {
-      console.error('Both APIs failed:', mistralError);
-      throw new Error('Both Groq and Mistral APIs failed to generate flashcards');
+      console.error('Mistral API failed:', mistralError);
+      // Handle the error gracefully, possibly return a fallback response
+      throw new Error('Both Groq and Mistral APIs failed');
     }
   }
 }
