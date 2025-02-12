@@ -185,7 +185,7 @@ export function FileUploader() {
       'audio/mpeg': ['.mp3'],
       'audio/wav': ['.wav']
     },
-    maxSize: 50 * 1024 * 1024, // 50MB
+    maxSize: 100 * 1024 * 1024, // 100MB
   });
 
   const handleGenerateFlashcards = async () => {
@@ -300,7 +300,7 @@ export function FileUploader() {
             Or click to browse
           </p>
           <p className="text-xs text-[#C0C0C0]">
-            Supported formats: PDF, DOC, DOCX, MP3, WAV (max 50MB)
+            Supported formats: PDF, DOC, DOCX, MP3, WAV (max 100MB)
           </p>
         </div>
 
