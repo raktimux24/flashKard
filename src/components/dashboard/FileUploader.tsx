@@ -300,7 +300,7 @@ export function FileUploader() {
             Or click to browse
           </p>
           <p className="text-xs text-[#C0C0C0]">
-            Supported formats: PDF, DOC, DOCX, MP3, WAV (max 100MB)
+            Supported formats: PDF, DOC, DOCX, (max 100MB)
           </p>
         </div>
 

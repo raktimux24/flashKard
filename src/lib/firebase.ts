@@ -16,6 +16,29 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
+const getAuthErrorMessage = (error: { code: string }) => {
+  switch (error.code) {
+    case 'auth/email-already-in-use':
+      return 'This email is already registered. Please try logging in instead.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/operation-not-allowed':
+      return 'Email/password sign up is not enabled. Please contact support.';
+    case 'auth/weak-password':
+      return 'Password should be at least 6 characters long.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Please contact support.';
+    case 'auth/user-not-found':
+      return 'No account found with this email. Please check your email or sign up.';
+    case 'auth/wrong-password':
+      return 'Incorrect password. Please try again or reset your password.';
+    case 'auth/too-many-requests':
+      return 'Too many failed attempts. Please try again later or reset your password.';
+    default:
+      return 'An error occurred. Please try again.';
+  }
+};
+
 // Auth functions
 export const signUp = async (email: string, password: string, name: string) => {
   try {
@@ -50,7 +73,7 @@ export const signUp = async (email: string, password: string, name: string) => {
 
     return { user: userCredential.user, error: null };
   } catch (error: any) {
-    return { user: null, error: error.message };
+    return { user: null, error: getAuthErrorMessage(error) };
   }
 };
 
@@ -72,7 +95,7 @@ export const signIn = async (email: string, password: string) => {
 
     return { user: userCredential.user, error: null };
   } catch (error: any) {
-    return { user: null, error: error.message };
+    return { user: null, error: getAuthErrorMessage(error) };
   }
 };
 

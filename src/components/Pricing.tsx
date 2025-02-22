@@ -22,23 +22,21 @@ export function Pricing() {
             benefits={[
               { text: "3 flashcard generations per month", checked: true },
               { text: "Basic file formats support", checked: true },
-              { text: "Export to PDF", checked: true },
-              { text: "Email support", checked: true },
-              { text: "Custom organization", checked: false },
+              { text: "Export to PDF", checked: false },
+              { text: "Email support", checked: false },
               { text: "Priority AI processing", checked: false },
             ]}
           />
           <PricingCard
             tier="Pro"
-            price="$4.99/mo"
+            price="₹199/mo"
             bestFor="For serious learners"
             CTA="Start Free Trial"
             benefits={[
               { text: "Unlimited flashcard generations", checked: true },
               { text: "Advanced file formats support", checked: true },
               { text: "Export to PDF", checked: true },
-              { text: "Priority support", checked: true },
-              { text: "Custom organization", checked: true },
+              { text: "Email support", checked: true },
               { text: "Priority AI processing", checked: true },
             ]}
           />
@@ -50,7 +48,6 @@ export function Pricing() {
             benefits={[
               { text: "Everything in Pro", checked: true },
               { text: "Custom integrations", checked: true },
-              { text: "Team management", checked: true },
               { text: "Advanced analytics", checked: true },
               { text: "24/7 dedicated support", checked: true },
               { text: "Custom AI training", checked: true },

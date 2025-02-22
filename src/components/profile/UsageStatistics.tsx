@@ -98,7 +98,7 @@ export const UsageStatistics = () => {
     if (hours < 1) {
       return `${Math.round(hours * 60)} minutes`;
     }
-    return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+    return `${hours.toFixed(2)} ${hours === 1 ? 'hour' : 'hours'}`;
   };
 
   return (

@@ -1,11 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
 
 export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [hasScrolled, setHasScrolled] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+
+  console.log("Auth state in Navbar:", { user });
+
+  const handleLogoClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    console.log("Logo clicked, user state:", { user });
+    if (user) {
+      navigate('/dashboard');
+    } else {
+      navigate('/');
+    }
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -23,10 +37,14 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
-            <Link to="/" className="flex items-center">
-              <img src="/FlashCardAI Logo.svg" alt="Flash Karao Logo" className="h-8 w-8" />
-              <span className="ml-2 text-xl font-bold">Flash Karao</span>
-            </Link>
+            <a 
+              href="#"
+              onClick={handleLogoClick}
+              className="flex items-center"
+            >
+              <img src="/Flash AI 01.svg" alt="Flash Karao Logo" className="h-12 w-auto" />
+              
+            </a>
           </div>
           
           {/* Desktop Navigation */}

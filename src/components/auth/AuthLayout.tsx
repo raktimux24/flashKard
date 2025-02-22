@@ -1,5 +1,5 @@
 import React from 'react';
-import { Brain, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../ui/button';
 
@@ -27,7 +27,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
         <div className="max-w-md w-full space-y-8">
           <div className="text-center">
             <Link to="/" className="inline-flex items-center justify-center mb-8">
-              <Brain className="h-12 w-12 text-[#00A6B2]" />
+              <img src="/Flash AI 01.svg" alt="Flash Karao Logo" className="h-12 w-auto" />
             </Link>
             <h2 className="text-3xl font-bold text-[#00A6B2]">{title}</h2>
             {subtitle && (

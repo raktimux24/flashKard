@@ -27,9 +27,43 @@ export function LoginPage() {
     email: '',
     password: '',
   });
+  const [formErrors, setFormErrors] = useState({
+    email: '',
+    password: '',
+  });
+
+  const validateForm = () => {
+    const errors = {
+      email: '',
+      password: '',
+    };
+    let isValid = true;
+
+    if (!formData.email) {
+      errors.email = 'Email is required';
+      isValid = false;
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+      isValid = false;
+    }
+
+    if (!formData.password) {
+      errors.password = 'Password is required';
+      isValid = false;
+    }
+
+    setFormErrors(errors);
+    return isValid;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+    
+    if (!validateForm()) {
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -72,8 +106,13 @@ export function LoginPage() {
     >
       <form onSubmit={handleSubmit} className="mt-8 space-y-6">
         {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-sm text-red-500">{error}</p>
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start">
+            <div className="mr-3 mt-0.5">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <p className="text-sm text-red-500 flex-1">{error}</p>
           </div>
         )}
 
@@ -88,10 +127,18 @@ export function LoginPage() {
               type="email"
               required
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="mt-1 block w-full px-3 py-2 bg-[#2A2A2A] border border-[#404040] rounded-lg focus:ring-2 focus:ring-[#00A6B2] focus:border-transparent"
+              onChange={(e) => {
+                setFormData({ ...formData, email: e.target.value });
+                setFormErrors({ ...formErrors, email: '' });
+              }}
+              className={`mt-1 block w-full px-3 py-2 bg-[#2A2A2A] border ${
+                formErrors.email ? 'border-red-500' : 'border-[#404040]'
+              } rounded-lg focus:ring-2 focus:ring-[#00A6B2] focus:border-transparent transition-colors`}
               placeholder="Enter your email"
             />
+            {formErrors.email && (
+              <p className="mt-1 text-sm text-red-500">{formErrors.email}</p>
+            )}
           </div>
 
           <div>
@@ -105,21 +152,18 @@ export function LoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 required
                 value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="block w-full px-3 py-2 bg-[#2A2A2A] border border-[#404040] rounded-lg focus:ring-2 focus:ring-[#00A6B2] focus:border-transparent"
+                onChange={(e) => {
+                  setFormData({ ...formData, password: e.target.value });
+                  setFormErrors({ ...formErrors, password: '' });
+                }}
+                className={`block w-full px-3 py-2 bg-[#2A2A2A] border ${
+                  formErrors.password ? 'border-red-500' : 'border-[#404040]'
+                } rounded-lg focus:ring-2 focus:ring-[#00A6B2] focus:border-transparent pr-10 transition-colors`}
                 placeholder="Enter your password"
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
-              >
-                {showPassword ? (
-                  <EyeOff className="h-5 w-5 text-[#C0C0C0]" />
-                ) : (
-                  <Eye className="h-5 w-5 text-[#C0C0C0]" />
-                )}
-              </button>
+              {formErrors.password && (
+                <p className="mt-1 text-sm text-red-500">{formErrors.password}</p>
+              )}
             </div>
           </div>
         </div>

@@ -17,6 +17,7 @@ import { Dashboard } from './pages/Dashboard';
 import { FlashcardDisplay } from './pages/FlashcardDisplay';
 import { Profile } from './pages/Profile';
 import { AuthProvider } from './context/AuthContext';
+import { Providers } from './app/providers';
 import { Toaster } from './components/ui/toaster';
 
 // Add interface for props
@@ -118,7 +119,9 @@ function AppContent({ flashcards = [], title = 'Flashcards' }: AppProps) {
 function App(props: AppProps) {
   return (
     <AuthProvider>
-      <AppContent {...props} />
+      <Providers>
+        <AppContent {...props} />
+      </Providers>
     </AuthProvider>
   );
 }

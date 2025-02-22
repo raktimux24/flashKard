@@ -3,6 +3,7 @@ import { Check, X } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { Button } from "./button"
 import { Card } from "./card"
+import React from 'react';
 
 interface BenefitProps {
   text: string
@@ -82,5 +83,5 @@ export const PricingCard = ({
         </Button>
       </Card>
     </motion.div>
-  )
+  );
 }

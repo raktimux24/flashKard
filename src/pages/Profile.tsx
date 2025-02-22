@@ -13,15 +13,15 @@ export function Profile() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-8 pb-8">
+      <div className="container mx-auto px-4 space-y-8 pb-8 max-w-7xl">
         <ProfileHeader />
 
         {/* Tabs */}
-        <div className="flex gap-2 border-b border-[#404040]">
+        <div className="flex flex-wrap gap-2 border-b border-[#404040]">
           <Button
             variant="ghost"
             className={cn(
-              "relative pb-4",
+              "relative pb-4 flex-1 sm:flex-none",
               activeTab === 'account' ? "text-[#00A6B2]" : "text-[#C0C0C0] hover:text-[#EAEAEA]"
             )}
             onClick={() => setActiveTab('account')}
@@ -34,7 +34,7 @@ export function Profile() {
           <Button
             variant="ghost"
             className={cn(
-              "relative pb-4",
+              "relative pb-4 flex-1 sm:flex-none",
               activeTab === 'statistics' ? "text-[#00A6B2]" : "text-[#C0C0C0] hover:text-[#EAEAEA]"
             )}
             onClick={() => setActiveTab('statistics')}

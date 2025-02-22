@@ -224,14 +224,14 @@ export function FlashcardSets() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-semibold text-[#EAEAEA]">Your Flashcard Sets</h2>
-        <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-2">
+        <h2 className="text-xl sm:text-2xl font-semibold text-[#EAEAEA]">Your Flashcard Sets</h2>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {flashcardSets.length > 0 && (
             <>
               <Button 
                 variant="outline" 
-                className="gap-2"
+                className="gap-2 flex-1 sm:flex-initial justify-center"
                 onClick={toggleAll}
               >
                 {selectedSets.size === flashcardSets.length ? (
@@ -243,7 +243,7 @@ export function FlashcardSets() {
               </Button>
               <Button 
                 variant="outline" 
-                className="gap-2"
+                className="gap-2 flex-1 sm:flex-initial justify-center"
                 onClick={handleExportSelected}
                 disabled={selectedSets.size === 0}
               >
