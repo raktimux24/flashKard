@@ -1,7 +1,34 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PricingCard } from './ui/dark-gradient-pricing';
+import { logAnalyticsEvent, AnalyticsEvents } from '../lib/firebase';
 
 export function Pricing() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    logAnalyticsEvent(AnalyticsEvents.LANDING_PAGE_VIEW, {
+      section: 'pricing',
+      timestamp: new Date().toISOString()
+    });
+  }, []);
+
+  const handlePlanSelect = (tier: string, price: string) => {
+    logAnalyticsEvent(AnalyticsEvents.PRICING_PLAN_SELECT, {
+      plan_tier: tier,
+      plan_price: price,
+      timestamp: new Date().toISOString()
+    });
+
+    if (tier === 'Enterprise') {
+      // Navigate to contact page or open contact form
+      navigate('/contact');
+    } else {
+      // Navigate to signup with selected plan
+      navigate('/signup', { state: { selectedPlan: tier } });
+    }
+  };
+
   return (
     <section className="relative overflow-hidden bg-transparent text-[#EAEAEA]">
       <div className="relative z-10 mx-auto max-w-5xl px-4 py-20 md:px-8">
@@ -26,6 +53,7 @@ export function Pricing() {
               { text: "Email support", checked: false },
               { text: "Priority AI processing", checked: false },
             ]}
+            onSelect={() => handlePlanSelect("Basic", "Free")}
           />
           <PricingCard
             tier="Pro"
@@ -39,6 +67,7 @@ export function Pricing() {
               { text: "Email support", checked: true },
               { text: "Priority AI processing", checked: true },
             ]}
+            onSelect={() => handlePlanSelect("Pro", "₹199/mo")}
           />
           <PricingCard
             tier="Enterprise"
@@ -49,9 +78,10 @@ export function Pricing() {
               { text: "Everything in Pro", checked: true },
               { text: "Custom integrations", checked: true },
               { text: "Advanced analytics", checked: true },
-              { text: "24/7 dedicated support", checked: true },
-              { text: "Custom AI training", checked: true },
+              { text: "Dedicated support", checked: true },
+              { text: "Custom AI models", checked: true },
             ]}
+            onSelect={() => handlePlanSelect("Enterprise", "Custom")}
           />
         </div>
       </div>

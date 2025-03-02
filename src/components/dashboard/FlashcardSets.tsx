@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Eye, Edit2, Trash2, FileDown, CheckSquare, Square } from 'lucide-react';
+import { Eye, Edit2, Trash2, FileDown, CheckSquare, Square, File } from 'lucide-react';
 import { PatternCard, PatternCardBody } from '../ui/card-with-ellipsis-pattern';
 import { cn } from '../../lib/utils';
 import { addDoc, collection, serverTimestamp, onSnapshot, query, orderBy, where, getDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { db, logAnalyticsEvent, AnalyticsEvents } from '../../lib/firebase';
 import { Timestamp } from 'firebase/firestore';
-import { useAuthStore } from '../../store/authStore';
-import { Loader2, File } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { Loader2 } from 'lucide-react';
 import { useStatistics } from '../../hooks/useStatistics';
 import { statisticsService } from '../../services/statisticsService';
 
@@ -35,69 +35,35 @@ export function FlashcardSets() {
   const [flashcardSets, setFlashcardSets] = useState<FlashcardSet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const user = useAuthStore(state => state.user);
+  const { user, loading: authLoading } = useAuth();
   const { incrementStatistic } = useStatistics();
 
   useEffect(() => {
-    console.log('FlashcardSets component state:', {
-      flashcardSets,
-      isLoading,
-      error,
-      selectedSets: Array.from(selectedSets),
-      user: user?.uid
-    });
-  }, [flashcardSets, isLoading, error, selectedSets, user]);
+    if (authLoading) return;
 
-  // Debug function to check Firestore data
-  const checkFirestoreData = async () => {
-    if (!user) return;
-    
-    try {
-      console.log('Checking Firestore data directly...');
-      const querySnapshot = await getDocs(collection(db, 'flashcardsets'));
-      console.log('All documents in collection:', querySnapshot.size);
-      querySnapshot.forEach(doc => {
-        console.log('Document:', doc.id, doc.data());
-      });
-    } catch (err) {
-      console.error('Error checking Firestore:', err);
-    }
-  };
-
-  useEffect(() => {
-    checkFirestoreData();
     if (!user) {
-      console.log('No user found, clearing flashcard sets');
       setFlashcardSets([]);
       setIsLoading(false);
       return;
     }
 
-    console.log('Current user:', user.uid);
-
     // Using query that matches our composite index
     const q = query(
       collection(db, 'flashcardsets'),
       where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-      orderBy('__name__', 'desc')
+      orderBy('createdAt', 'desc')
     );
 
-    console.log('Query created:', q);
     setIsLoading(true);
     setError(null);
 
     const unsubscribe = onSnapshot(q,
       (querySnapshot) => {
-        console.log('Snapshot received, number of docs:', querySnapshot.size);
-        console.log('Docs:', querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        
         const sets = querySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         } as FlashcardSet));
         
-        console.log('Processed sets:', sets);
         setFlashcardSets(sets);
         setIsLoading(false);
       },
@@ -109,7 +75,7 @@ export function FlashcardSets() {
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, authLoading]);
 
   const toggleSet = (id: string) => {
     const newSelected = new Set(selectedSets);
@@ -154,11 +120,19 @@ export function FlashcardSets() {
 
     // Update export statistics
     incrementStatistic('totalExports');
+    logAnalyticsEvent(AnalyticsEvents.FILE_EXPORT, {
+      setIds: Array.from(selectedSets),
+      format: 'json',
+      success: true
+    });
   };
 
-  const handleView = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    navigate(`/dashboard/flashcards/${id}`);
+  const handleViewSet = (setId: string) => {
+    logAnalyticsEvent(AnalyticsEvents.VIEW_FLASHCARD_SET, {
+      setId,
+      numberOfCards: flashcardSets.find(set => set.id === setId)?.numberOfCards
+    });
+    navigate(`/dashboard/flashcards/${setId}`);
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -184,9 +158,19 @@ export function FlashcardSets() {
         newSelected.delete(id);
         return newSelected;
       });
+
+      logAnalyticsEvent(AnalyticsEvents.DELETE_FLASHCARD_SET, {
+        setId,
+        success: true
+      });
     } catch (err) {
       console.error('Error deleting flashcard set:', err);
       alert('Failed to delete flashcard set. Please try again.');
+      logAnalyticsEvent(AnalyticsEvents.DELETE_FLASHCARD_SET, {
+        setId,
+        success: false,
+        error: err.message
+      });
     }
   };
 
@@ -313,7 +297,7 @@ export function FlashcardSets() {
                       variant="ghost" 
                       size="sm" 
                       className="gap-1 hover:text-[#00A6B2]"
-                      onClick={(e) => handleView(e, set.id)}
+                      onClick={(e) => handleViewSet(set.id)}
                     >
                       <Eye className="h-4 w-4" />
                       View

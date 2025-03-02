@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { AuthLayout } from './AuthLayout';
 import { Button } from '../ui/button';
-import { signIn, signInWithGoogle } from '../../lib/firebase';
+import { signIn, signInWithGoogle, logAnalyticsEvent, AnalyticsEvents } from '../../lib/firebase';
 import { useAuthStore } from '../../store/authStore';
 import { SocialLoginButton } from './SocialLoginButton';
 import { User } from 'firebase/auth';
@@ -58,44 +58,50 @@ export function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsLoading(true);
     setError(null);
 
-    const { user: firebaseUser, error } = await signIn(formData.email, formData.password);
-    
-    if (error) {
-      setError(error);
+    try {
+      const user = await signIn(formData.email, formData.password);
+      logAnalyticsEvent(AnalyticsEvents.USER_LOGIN, {
+        method: 'email',
+        success: true
+      });
+      setUser(user);
+      navigate(from);
+    } catch (err: any) {
+      logAnalyticsEvent(AnalyticsEvents.USER_LOGIN, {
+        method: 'email',
+        success: false,
+        error: err.message
+      });
+      setError(err.message);
+    } finally {
       setIsLoading(false);
-      return;
-    }
-
-    if (firebaseUser) {
-      setUser(firebaseUser);
-      navigate(from, { replace: true });
     }
   };
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     setError(null);
-    
-    const { user, error } = await signInWithGoogle();
-    
-    if (error) {
-      setError(error);
-      setIsLoading(false);
-      return;
-    }
 
-    if (user) {
+    try {
+      const user = await signInWithGoogle();
+      logAnalyticsEvent(AnalyticsEvents.GOOGLE_SIGN_IN, {
+        success: true
+      });
       setUser(user);
-      navigate(from, { replace: true });
+      navigate(from);
+    } catch (err: any) {
+      logAnalyticsEvent(AnalyticsEvents.GOOGLE_SIGN_IN, {
+        success: false,
+        error: err.message
+      });
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 

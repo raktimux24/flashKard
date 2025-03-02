@@ -34,6 +34,7 @@ interface PricingCardProps {
   CTA: string
   benefits: Array<{ text: string; checked: boolean }>
   className?: string
+  onSelect?: () => void
 }
 
 export const PricingCard = ({
@@ -43,6 +44,7 @@ export const PricingCard = ({
   CTA,
   benefits,
   className,
+  onSelect
 }: PricingCardProps) => {
   return (
     <motion.div
@@ -50,38 +52,36 @@ export const PricingCard = ({
       whileInView={{ filter: "blur(0px)" }}
       transition={{ duration: 0.5, ease: "easeInOut", delay: 0.25 }}
     >
-      <Card
+      <Card 
         className={cn(
-          "relative h-full w-full overflow-hidden border",
-          "dark:border-zinc-700 dark:bg-gradient-to-br dark:from-zinc-950/50 dark:to-zinc-900/80",
-          "border-zinc-200 bg-gradient-to-br from-zinc-50/50 to-zinc-100/80",
-          "p-6",
-          className,
+          "relative overflow-hidden border border-zinc-700/50 bg-gradient-to-t from-zinc-900/50 to-zinc-900/25 p-8",
+          className
         )}
       >
-        <div className="flex flex-col items-center border-b pb-6 dark:border-zinc-700 border-zinc-200">
-          <span className="mb-6 inline-block dark:text-zinc-50 text-zinc-900">
-            {tier}
-          </span>
-          <span className="mb-3 inline-block text-4xl font-medium">
-            {price}
-          </span>
-          <span className="dark:bg-gradient-to-br dark:from-zinc-200 dark:to-zinc-500 bg-gradient-to-br from-zinc-700 to-zinc-900 bg-clip-text text-center text-transparent">
-            {bestFor}
-          </span>
+        <div className="relative z-20 flex flex-col gap-3">
+          <div>
+            <p className="text-sm text-[#C0C0C0]">{bestFor}</p>
+            <div className="flex flex-col gap-1">
+              <p className="text-3xl font-semibold text-[#00A6B2]">{tier}</p>
+              <p className="text-sm text-[#C0C0C0]">Starting from</p>
+              <p className="text-4xl font-semibold text-white">{price}</p>
+            </div>
+          </div>
+
+          <Button
+            onClick={onSelect}
+            className="w-full bg-[#00A6B2] hover:bg-[#008C96] text-white"
+          >
+            {CTA}
+          </Button>
+
+          <div className="flex flex-col gap-3 pt-3">
+            {benefits.map((benefit, i) => (
+              <Benefit key={i} {...benefit} />
+            ))}
+          </div>
         </div>
-        <div className="space-y-4 py-9">
-          {benefits.map((benefit, index) => (
-            <Benefit key={index} {...benefit} />
-          ))}
-        </div>
-        <Button
-          className="w-full"
-          variant={tier === "Pro" ? "default" : "ghost"}
-        >
-          {CTA}
-        </Button>
       </Card>
     </motion.div>
-  );
+  )
 }

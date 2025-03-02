@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
-import { useAuthStore } from './store/authStore';
+import { useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
@@ -44,14 +44,10 @@ const AnimatedGrid = () => (
 
 function AppContent({ flashcards = [], title = 'Flashcards' }: AppProps) {
   const location = useLocation();
-  const { user, isLoading, initialize } = useAuthStore();
-
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
+  const { user, loading } = useAuth();
 
   // Show loading spinner while checking auth status
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#121212] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#00A6B2]" />

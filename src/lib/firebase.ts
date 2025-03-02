@@ -1,6 +1,33 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { initializeApp, FirebaseApp } from 'firebase/app';
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged, 
+  User, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  updateProfile, 
+  updatePassword, 
+  EmailAuthProvider, 
+  reauthenticateWithCredential,
+  Auth
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  updateDoc, 
+  serverTimestamp,
+  Firestore
+} from 'firebase/firestore';
+import { 
+  getAnalytics, 
+  logEvent,
+  Analytics
+} from 'firebase/analytics';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -8,15 +35,109 @@ const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+} as const;
+
+// Initialize Firebase with validation
+let app: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
+let analytics: Analytics;
+
+try {
+  // Validate config
+  const requiredFields = [
+    'apiKey',
+    'authDomain',
+    'projectId',
+    'storageBucket',
+    'messagingSenderId',
+    'appId'
+  ] as const;
+
+  const missingFields = requiredFields.filter(field => !firebaseConfig[field]);
+  if (missingFields.length > 0) {
+    throw new Error(`Missing required Firebase configuration fields: ${missingFields.join(', ')}`);
+  }
+
+  console.log('Initializing Firebase with config:', {
+    projectId: firebaseConfig.projectId,
+    authDomain: firebaseConfig.authDomain
+  });
+
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  analytics = getAnalytics(app);
+  
+  console.log('Firebase initialized successfully');
+} catch (error) {
+  console.error('Error initializing Firebase:', error);
+  throw error;
+}
+
+// Export initialized services
+export { auth, db, analytics };
+
+// Analytics Events
+export const AnalyticsEvents = {
+  // Auth Events
+  USER_SIGNUP: 'user_signup',
+  USER_LOGIN: 'user_login',
+  USER_LOGOUT: 'user_logout',
+  GOOGLE_SIGN_IN: 'google_sign_in',
+  PASSWORD_RESET: 'password_reset',
+  
+  // Flashcard Events
+  CREATE_FLASHCARD_SET: 'create_flashcard_set',
+  DELETE_FLASHCARD_SET: 'delete_flashcard_set',
+  EDIT_FLASHCARD_SET: 'edit_flashcard_set',
+  VIEW_FLASHCARD_SET: 'view_flashcard_set',
+  STUDY_SESSION_START: 'study_session_start',
+  STUDY_SESSION_COMPLETE: 'study_session_complete',
+  
+  // File Operations
+  FILE_UPLOAD: 'file_upload',
+  FILE_EXPORT: 'file_export',
+  
+  // User Actions
+  PROFILE_UPDATE: 'profile_update',
+  SETTINGS_CHANGE: 'settings_change',
+  
+  // Navigation
+  PAGE_VIEW: 'page_view',
+  
+  // Landing Page Events
+  LANDING_PAGE_VIEW: 'landing_page_view',
+  GET_STARTED_CLICK: 'get_started_click',
+  LEARN_MORE_CLICK: 'learn_more_click',
+  FEATURE_CLICK: 'feature_click',
+  PRICING_PLAN_VIEW: 'pricing_plan_view',
+  PRICING_PLAN_SELECT: 'pricing_plan_select',
+  LANDING_PAGE_SIGNUP_CLICK: 'landing_page_signup_click',
+  LANDING_PAGE_LOGIN_CLICK: 'landing_page_login_click'
+} as const;
+
+// Analytics helper function
+export const logAnalyticsEvent = (eventName: string, eventParams?: { [key: string]: any }) => {
+  try {
+    if (!analytics) {
+      console.error('Analytics not initialized');
+      return;
+    }
+    logEvent(analytics, eventName, {
+      timestamp: new Date().toISOString(),
+      ...eventParams
+    });
+  } catch (error) {
+    console.error('Failed to log analytics event:', error);
+  }
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-
+// Enhanced error handling for auth errors
 const getAuthErrorMessage = (error: { code: string }) => {
+  console.log('Auth error code:', error.code);
   switch (error.code) {
     case 'auth/email-already-in-use':
       return 'This email is already registered. Please try logging in instead.';
@@ -108,15 +229,38 @@ export const logOut = async () => {
   }
 };
 
-// User data functions
+// Enhanced user data functions with better error handling
 export const getUserData = async (userId: string) => {
+  if (!auth || !db) {
+    console.error('Firebase services not initialized');
+    return { data: null, error: 'Firebase services not initialized' };
+  }
+
   try {
+    console.log('Fetching user data for ID:', userId);
     const userDoc = await getDoc(doc(db, 'users', userId));
+    
     if (userDoc.exists()) {
+      console.log('User document found');
       return { data: userDoc.data(), error: null };
     }
-    return { data: null, error: 'User not found' };
+    
+    console.log('No user document found, attempting to create');
+    // If document doesn't exist, create it with default values
+    const defaultUserData = {
+      name: auth.currentUser?.displayName || '',
+      email: auth.currentUser?.email || '',
+      createdAt: serverTimestamp(),
+      flashcardSets: 0,
+      totalFlashcards: 0,
+      filesUploaded: 0,
+      lastActive: serverTimestamp(),
+    };
+
+    await setDoc(doc(db, 'users', userId), defaultUserData);
+    return { data: defaultUserData, error: null };
   } catch (error: any) {
+    console.error('Error in getUserData:', error);
     return { data: null, error: error.message };
   }
 };
