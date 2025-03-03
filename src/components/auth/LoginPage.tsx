@@ -64,13 +64,20 @@ export function LoginPage() {
     setError(null);
 
     try {
-      const user = await signIn(formData.email, formData.password);
+      const result = await signIn(formData.email, formData.password);
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      
       logAnalyticsEvent(AnalyticsEvents.USER_LOGIN, {
         method: 'email',
         success: true
       });
-      setUser(user);
-      navigate(from);
+      
+      if (result.user) {
+        setUser(result.user);
+        navigate(from);
+      }
     } catch (err: any) {
       logAnalyticsEvent(AnalyticsEvents.USER_LOGIN, {
         method: 'email',
@@ -88,12 +95,19 @@ export function LoginPage() {
     setError(null);
 
     try {
-      const user = await signInWithGoogle();
+      const result = await signInWithGoogle();
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      
       logAnalyticsEvent(AnalyticsEvents.GOOGLE_SIGN_IN, {
         success: true
       });
-      setUser(user);
-      navigate(from);
+      
+      if (result.user) {
+        setUser(result.user);
+        navigate(from);
+      }
     } catch (err: any) {
       logAnalyticsEvent(AnalyticsEvents.GOOGLE_SIGN_IN, {
         success: false,

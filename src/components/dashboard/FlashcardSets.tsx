@@ -160,16 +160,17 @@ export function FlashcardSets() {
       });
 
       logAnalyticsEvent(AnalyticsEvents.DELETE_FLASHCARD_SET, {
-        setId,
+        setId: id,
         success: true
       });
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error deleting flashcard set:', err);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       alert('Failed to delete flashcard set. Please try again.');
       logAnalyticsEvent(AnalyticsEvents.DELETE_FLASHCARD_SET, {
-        setId,
+        setId: id,
         success: false,
-        error: err.message
+        error: errorMessage
       });
     }
   };
